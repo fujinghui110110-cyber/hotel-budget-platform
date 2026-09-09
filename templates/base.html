@@ -57,6 +57,7 @@
       </header>
   {% endif %}
       <main id="main-content" class="main-content{% if not user.is_authenticated %} main-content--auth{% endif %}">
+      {% if cycle.source_budget_year %}<p class="message message--info">流程演练：{{ cycle.source_budget_year }} 年原表用于 {{ cycle.budget_year }} 年预算流程测试，年份按相同跨度映射；数据不代表真实的 {{ cycle.budget_year }} 年预算。</p>{% elif upload.cycle.source_budget_year %}<p class="message message--info">流程演练：本文件是 {{ upload.cycle.source_budget_year }} 年原表，用于 {{ upload.cycle.budget_year }} 年预算流程测试。</p>{% endif %}
         {% if messages %}{% for message in messages %}<p class="message {% if message.tags == 'error' %}message--error{% elif message.tags == 'success' %}message--success{% endif %}">{{ message }}</p>{% endfor %}{% endif %}
         {% block content %}{% endblock %}
       </main>

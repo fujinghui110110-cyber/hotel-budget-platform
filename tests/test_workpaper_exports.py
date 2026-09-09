@@ -256,3 +256,49 @@ class WorkpaperExportTests(TestCase):
         self.assertEqual(download.status_code, 200)
         self.assertEqual(b"".join(download.streaming_content), b"original-historical")
         download.close()
+
+    def test_original_xlsm_keeps_extension_and_bytes(self):
+        upload = self._approved(self.project, "macro-source")
+        original = self.storage / upload.original_path
+        renamed = original.with_suffix(".xlsm")
+        original.rename(renamed)
+        upload.original_path = str(renamed.relative_to(self.storage))
+        upload.original_name = "macro-source.xlsm"
+        upload.save(update_fields=["original_path", "original_name"])
+        self._login_admin()
+        response = self.client.get(
+            reverse(
+                "management_workpaper_download", args=[self.project.pk, "original"]
+            ),
+            {"cycle": self.cycle.pk},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(".xlsm", response["Content-Disposition"])
+        self.assertEqual(
+            response["Content-Type"], "application/vnd.ms-excel.sheet.macroEnabled.12"
+        )
+        self.assertEqual(b"".join(response.streaming_content), b"original-macro-source")
+        response.close()
+
+    def test_rehearsal_batch_exports_originals_without_recalculation(self):
+        self.cycle.source_budget_year = 2026
+        self.cycle.save()
+        for project in (self.project, self.other_project):
+            upload = self._upload(project, project.code)
+            upload.recalculated_path = ""
+            upload.save()
+        self._login_admin()
+        response = self.client.get(
+            reverse("management_workpaper_batch_download"),
+            {"cycle": self.cycle.pk, "selection": "latest"},
+        )
+        self.assertEqual(response.status_code, 200)
+        with zipfile.ZipFile(
+            io.BytesIO(b"".join(response.streaming_content))
+        ) as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            self.assertEqual(len(manifest["files"]), 2)
+            self.assertTrue(
+                all(item["artifact"] == "original" for item in manifest["files"])
+            )
+        response.close()

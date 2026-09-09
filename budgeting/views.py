@@ -148,7 +148,7 @@ def upload_new(request):
         messages.info(request, "管理端尚未开放可上传的预算版本。")
         return redirect("project_home")
     if request.method == "POST":
-        form = UploadForm(request.POST, request.FILES)
+        form = UploadForm(request.POST, request.FILES, cycle=cycle)
         if form.is_valid():
             try:
                 upload = save_upload(request.user.project, cycle, form.cleaned_data["file"])
@@ -165,7 +165,7 @@ def upload_new(request):
             except ValueError as exc:
                 form.add_error("file", str(exc))
     else:
-        form = UploadForm()
+        form = UploadForm(cycle=cycle)
     return render(request, "budgeting/project_upload_new.html", {
         "form": form,
         "cycle": cycle,

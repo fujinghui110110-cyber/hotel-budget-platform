@@ -61,6 +61,7 @@ class BudgetCycle(models.Model):
     FROZEN = Status.FROZEN
     name = models.CharField(max_length=120)
     budget_year = models.PositiveIntegerField()
+    source_budget_year = models.PositiveIntegerField(null=True, blank=True)
     revision_no = models.PositiveIntegerField(default=1)
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.SETUP)
     template = models.ForeignKey("TemplateVersion", null=True, blank=True, on_delete=models.PROTECT)

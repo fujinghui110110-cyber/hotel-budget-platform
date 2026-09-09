@@ -111,7 +111,8 @@ def save_upload(project, cycle, uploaded_file):
     project_cycle = ProjectCycle.objects.filter(project=project, cycle=cycle).first()
     if project_cycle and not project_cycle.is_open:
         raise ValueError("项目周期已关闭，不能上传")
-    if not uploaded_file.name.lower().endswith(".xlsx"):
+    suffixes = (".xlsx", ".xlsm") if cycle.source_budget_year else (".xlsx",)
+    if not uploaded_file.name.lower().endswith(suffixes):
         raise ValueError("仅允许上传 .xlsx 文件")
     if uploaded_file.size > 50 * 1024 * 1024:
         raise ValueError("压缩文件超过 50 MiB")
@@ -123,12 +124,12 @@ def save_upload(project, cycle, uploaded_file):
     rel_dir = Path("uploads") / project.code / str(upload_id)
     abs_dir = settings.BUDGET_STORAGE_ROOT / rel_dir
     abs_dir.mkdir(parents=True, exist_ok=True)
-    dest = abs_dir / "original.xlsx"
+    dest = abs_dir / ("original" + Path(uploaded_file.name).suffix.lower())
     with dest.open("wb") as fh:
         for chunk in uploaded_file.chunks():
             fh.write(chunk)
     digest = sha256_file(dest)
-    existing = UploadVersion.objects.filter(project=project, cycle=cycle, sha256=digest).order_by("-created_at").first()
+    existing = UploadVersion.objects.filter(project=project, cycle=cycle, sha256=digest).exclude(status=UploadVersion.Status.REJECTED).order_by("-created_at").first()
     if existing:
         shutil.rmtree(abs_dir, ignore_errors=True)
         return existing
@@ -138,7 +139,7 @@ def save_upload(project, cycle, uploaded_file):
         cycle=cycle,
         template=template,
         original_name=uploaded_file.name,
-        original_path=str(rel_dir / "original.xlsx"),
+        original_path=str(rel_dir / dest.name),
         sha256=digest,
     )
     ProcessingJob.objects.get_or_create(upload=upload, idempotency_key=f"upload:{upload.id}")
@@ -170,6 +171,9 @@ def process_upload(upload):
         upload.status = UploadVersion.Status.REJECTED
         upload.save(update_fields=["status"])
         return False
+    if upload.cycle.source_budget_year:
+        from budgeting.services.legacy_rehearsal import process_legacy_rehearsal
+        return process_legacy_rehearsal(upload, source_path, run)
     for issue in [*validate_xlsx_zip(source_path), *validate_upload_contract(upload, source_path)]:
         severity, code, message, location, actual_value, expected_value = _issue_parts(issue)
         ValidationIssue.objects.create(

@@ -156,7 +156,7 @@ def _report_definition(upload, report_code):
         graph, number_to_code = build_report_graph(manifest, report_code)
     except ValueError as exc:
         raise ScenarioError(str(exc)) from exc
-    rules = _rules(report_code)
+    rules = {} if manifest.get("legacy_rehearsal") else _rules(report_code)
     rule_targets = {f"R{number:04d}": deps for number, deps in rules.items()}
     derived = {
         code

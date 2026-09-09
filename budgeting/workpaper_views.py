@@ -227,7 +227,7 @@ def workpaper_download(request, project_id, artifact):
         workpaper.path.open("rb"),
         as_attachment=True,
         filename=download_filename(workpaper),
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        content_type="application/vnd.ms-excel.sheet.macroEnabled.12" if workpaper.path.suffix.lower() == ".xlsm" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     response["X-Workpaper-Selection"] = selection
     return response

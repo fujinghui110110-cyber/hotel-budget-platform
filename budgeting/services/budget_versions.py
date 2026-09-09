@@ -108,9 +108,12 @@ def create_and_open_budget_version(
     actor=None,
     name: str = "",
     template: TemplateVersion | None = None,
+    source_budget_year: int | None = None,
 ) -> BudgetCycle:
     if budget_year < 2000 or budget_year > 2200:
         raise ValueError("请输入有效的预算年度。")
+    if source_budget_year is not None and not 2000 <= source_budget_year < budget_year:
+        raise ValueError("演练原表年度必须早于预算年度，且不早于 2000 年。")
 
     latest_revision = (
         BudgetCycle.objects.select_for_update()
@@ -141,6 +144,7 @@ def create_and_open_budget_version(
     revision_no = latest_revision + 1
     cycle = BudgetCycle.objects.create(
         name=(name or f"{budget_year} 年度预算").strip(),
+        source_budget_year=source_budget_year,
         budget_year=budget_year,
         revision_no=revision_no,
         status=BudgetCycle.Status.OPEN,
