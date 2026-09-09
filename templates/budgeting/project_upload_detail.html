@@ -7,6 +7,7 @@
   <span>预算版本详情</span>
 {% endblock %}
 {% block content %}
+<p class="message message--info">{% if read_audit %}数据读取审计：{{ read_audit.issue_count }} 项提醒，{{ read_audit.missing_cells }} 个汇总数据项未读取。{% else %}上传完成后可在数据审计中查看未读取的科目和具体原因。{% endif %}<a href="{% url 'data_audit' %}?cycle={{ upload.cycle_id }}&project_id={{ upload.project_id }}">查看本项目数据审计</a></p>
 {% if upload.status == 'RECEIVED' or upload.status == 'PROCESSING' %}
 <section class="message message--info" role="status" data-status-url="{% url 'upload_status' upload.pk %}">
   <strong data-upload-status>{{ upload.get_status_display }}</strong> · {% if upload.cycle.source_budget_year %}系统正在读取原表已保存的数值与公式，不执行宏、不刷新外链。{% else %}系统正在后台重算并校验预算。{% endif %}完成后本页会自动刷新，也可以稍后从历史版本查看结果。

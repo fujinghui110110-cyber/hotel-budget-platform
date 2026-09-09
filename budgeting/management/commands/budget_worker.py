@@ -2,6 +2,7 @@ import time
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
+from django.db import OperationalError, connection
 from django.db.models import F
 from django.utils import timezone
 
@@ -28,6 +29,15 @@ class Command(BaseCommand):
                 time.sleep(options["sleep"])
 
     def _claim_job(self, lease_seconds):
+        for attempt in range(5):
+            try:
+                return self._claim_once(lease_seconds)
+            except OperationalError as exc:
+                if connection.vendor != "sqlite" or "locked" not in str(exc).lower() or attempt == 4:
+                    raise
+                time.sleep(0.02 * (attempt + 1))
+
+    def _claim_once(self, lease_seconds):
         now = timezone.now()
         expired = ProcessingJob.objects.filter(
             status=ProcessingJob.Status.RUNNING,
@@ -54,7 +64,10 @@ class Command(BaseCommand):
         )
         if not claimed:
             return None
-        job.refresh_from_db()
+        job.status = ProcessingJob.Status.RUNNING
+        job.attempts += 1
+        job.lease_until = now + timedelta(seconds=lease_seconds)
+        job.heartbeat_at = now
         return job
 
     def _run_job(self, job):
@@ -83,6 +96,11 @@ class Command(BaseCommand):
             job.status = ProcessingJob.Status.FAILED
             job.error = str(exc)
         else:
+            from budgeting.services.data_read_audit import build_upload_audit
+            try:
+                build_upload_audit(upload)
+            except Exception as exc:
+                self.stderr.write(f"数据读取审计暂不可用（{type(exc).__name__}），查看审计页面时将重试。")
             job.status = ProcessingJob.Status.DONE
             job.error = ""
         job.lease_until = None

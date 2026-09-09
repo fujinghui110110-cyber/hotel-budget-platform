@@ -3,6 +3,7 @@
 {% block title %}预算总览 · 酒店预算系统{% endblock %}
 {% block breadcrumb %}<span>预算总览</span>{% endblock %}
 {% block content %}
+<p class="message message--info">部分科目为空或趋势缺少期间时，可查看源表是否为空、映射是否匹配。<a href="{% url 'data_audit' %}?cycle={{ cycle.pk }}{% if selected_project_id %}&project_id={{ selected_project_id }}{% endif %}">查看数据审计与原因</a></p>
 <section class="planning-heading">
   <div><h1>预算总览</h1><p>统筹编制 {{ cycle.budget_year|default:"下一年度" }} 年预算，统一核对历史实际、当期预测与预算目标。</p></div>
   {% if demo_mode %}<span class="planning-note">演示数据</span>{% endif %}

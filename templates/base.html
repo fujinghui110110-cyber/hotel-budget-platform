@@ -20,12 +20,13 @@
       </a>
       {% if user.is_admin_role %}
       <nav class="side-nav">
-        <a href="/management/planning/" class="{% if request.resolver_match.url_name == 'planning_overview' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/layout-dashboard.svg' %}" alt="">预算总览</a>
-        <a href="{% url 'management_version_report' %}" class="{% if request.resolver_match.url_name == 'planning_projects' or 'version_report' in request.resolver_match.url_name or request.resolver_match.url_name == 'management_report' or request.resolver_match.url_name == 'report_catalog' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/building-2.svg' %}" alt="">项目预算</a>
-        <a href="{% url 'summary_list' %}" class="{% if 'scenario' in request.resolver_match.url_name or 'summary' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calculator.svg' %}" alt="">预算测算</a>
-        <a href="{% url 'cockpit_trend' %}" class="{% if 'trend' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/chart-no-axes-combined.svg' %}" alt="">收入与成本分析</a>
-        <a href="{% url 'cockpit_questions' %}" class="{% if 'question' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/messages-square.svg' %}" alt="">审核问答</a>
-        <a href="/management/templates/" class="{% if request.resolver_match.url_name == 'planning_templates' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">模板与填报</a>
+        <a href="/management/planning/{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if request.resolver_match.url_name == 'planning_overview' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/layout-dashboard.svg' %}" alt="">预算总览</a>
+        <a href="{% url 'management_version_report' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if request.resolver_match.url_name == 'planning_projects' or 'version_report' in request.resolver_match.url_name or request.resolver_match.url_name == 'management_report' or request.resolver_match.url_name == 'report_catalog' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/building-2.svg' %}" alt="">项目预算</a>
+        <a href="{% url 'summary_list' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if 'scenario' in request.resolver_match.url_name or 'summary' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calculator.svg' %}" alt="">预算测算</a>
+        <a href="{% url 'cockpit_trend' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if 'trend' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/chart-no-axes-combined.svg' %}" alt="">收入与成本分析</a>
+        <a href="{% url 'cockpit_questions' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if 'question' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/messages-square.svg' %}" alt="">审核问答</a>
+        <a href="{% url 'data_audit' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if request.resolver_match.url_name == 'data_audit' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/scroll-text.svg' %}" alt="">数据审计</a>
+      <a href="/management/templates/{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if request.resolver_match.url_name == 'planning_templates' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">模板与填报</a>
       </nav>
       <div class="side-nav side-nav--secondary">
         <span class="side-nav__caption">系统设置</span>
@@ -42,7 +43,8 @@
         <a href="{% url 'project_adjustments' %}" class="{% if request.resolver_match.url_name == 'project_adjustments' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calculator.svg' %}" alt="">调整任务</a>
         <a href="{% url 'project_history' %}" class="{% if request.resolver_match.url_name == 'project_history' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calendar-range.svg' %}" alt="">历史版本</a>
         <a href="{% url 'project_report_catalog' %}" class="{% if 'report' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/chart-no-axes-combined.svg' %}" alt="">全部报表</a>
-      </nav>
+      <a href="{% url 'data_audit' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if request.resolver_match.url_name == 'data_audit' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/scroll-text.svg' %}" alt="">数据审计</a>
+    </nav>
       {% endif %}
       <div class="sidebar__account">
         <span class="avatar" aria-hidden="true">{{ user.username|slice:":1"|upper }}</span>

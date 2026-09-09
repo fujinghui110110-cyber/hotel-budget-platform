@@ -46,6 +46,8 @@ def _report_url(cycle: BudgetCycle, project: Project | None = None, report_code:
 def _project_row(cycle: BudgetCycle, project: Project):
     upload = selected_upload(project, cycle)
     latest = latest_upload_status(project, cycle)
+    from budgeting.services.data_read_audit import build_upload_audit_summary
+    audit_summary = build_upload_audit_summary(latest) if latest and latest.status not in ("RECEIVED", "PROCESSING") else None
     if upload:
         state = "已上传，可查看/导出"
         state_class = "approved"
@@ -54,6 +56,7 @@ def _project_row(cycle: BudgetCycle, project: Project):
             state_class = "pending"
         return {
             "project": project,
+            "audit_summary": audit_summary,
             "upload": upload,
             "report_count": len(report_codes(upload)),
             "state": state,
@@ -67,6 +70,7 @@ def _project_row(cycle: BudgetCycle, project: Project):
         state, state_class = f"{latest.get_status_display()}，暂不可导出", "rejected"
     return {
         "project": project,
+            "audit_summary": audit_summary,
         "upload": None,
         "report_count": 0,
         "state": state,

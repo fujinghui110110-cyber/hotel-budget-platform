@@ -1,6 +1,6 @@
 from django.urls import include, path
 
-from budgeting import views
+from budgeting import views, data_audit_views
 from budgeting import cockpit_views
 from budgeting import planning_views
 from budgeting import workpaper_views
@@ -8,6 +8,7 @@ from budgeting import version_report_views, summary_views
 
 
 urlpatterns = [
+    path("data-audit/", data_audit_views.data_audit, name="data_audit"),
     path("", include("budgeting.version_urls")),
     path("management/summary-adjustments/", summary_views.summary_list, name="summary_list"),
     path("management/summary-adjustments/<uuid:scenario_id>/", summary_views.summary_detail, name="summary_detail"),

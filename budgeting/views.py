@@ -1,3 +1,4 @@
+from budgeting.services.trends import latest_report_uploads
 import math
 import re
 from decimal import Decimal, ROUND_HALF_UP
@@ -8,7 +9,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import connection
-from django.db.models import Count, F, Prefetch, Q
+from django.db.models import Count, Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
@@ -181,7 +182,10 @@ def project_upload_detail(request, upload_id):
         return HttpResponse(status=403)
     issues = ValidationIssue.objects.filter(run__upload=upload).order_by("severity", "code")
     job = ProcessingJob.objects.filter(upload=upload).order_by("-created_at").first()
+    from budgeting.services.data_read_audit import build_upload_audit_summary
+    read_audit = build_upload_audit_summary(upload) if upload.status not in ("RECEIVED", "PROCESSING") else None
     return render(request, "budgeting/project_upload_detail.html", {
+        "read_audit": read_audit,
         "upload": upload,
         "issues": issues,
         "job": job,
@@ -353,22 +357,17 @@ def _render_report(request, report_code, project=None):
         cycle = get_object_or_404(BudgetCycle, pk=cycle_id)
     else:
         cycle = active_cycle()
-    details = project_value_details(project, cycle, report_code) if project else (_company_value_details(cycle, report_code) if cycle else {})
+    details = project_value_details(project, cycle, report_code, data_scope="latest") if project else (_company_value_details(cycle, report_code, data_scope="latest") if cycle else {})
     values = {key: detail["value_int"] for key, detail in details.items()}
     units = {key: detail["unit"] for key, detail in details.items()}
     codes = sorted({row_code for row_code, _ in values})
     labels = {}
     if cycle:
-        current_ids = ProjectCycle.objects.filter(
-            cycle=cycle, project__is_active=True, current_upload__cycle=cycle,
-            current_upload__project=F("project"), current_upload__status=UploadVersion.Status.APPROVED,
-        )
-        if project:
-            current_ids = current_ids.filter(project=project)
+        current_ids = [item.current_upload_id for item in latest_report_uploads(cycle, project_id=project.pk if project else None)]
         labels = {
             rc: lbl
             for rc, lbl in NormalizedValue.objects.filter(
-                upload_id__in=current_ids.values("current_upload_id"), report_code=report_code
+                upload_id__in=current_ids, report_code=report_code
             )
             .values_list("row_code", "row_label")
             .distinct()
@@ -484,13 +483,10 @@ def report_catalog(request):
         project, projects = request.user.project, []
     else:
         raise Http404
-    cycle = active_cycle()
-    tables = sub_table_reports(cycle)
+    cycle = get_object_or_404(BudgetCycle, pk=request.GET["cycle"]) if request.GET.get("cycle", "").isdigit() else active_cycle()
+    tables = sub_table_reports(cycle, data_scope="latest")
     if project:
-        ids = ProjectCycle.objects.filter(
-            cycle=cycle, project=project, current_upload__cycle=cycle,
-            current_upload__project=project, current_upload__status=UploadVersion.Status.APPROVED,
-        ).values("current_upload_id")
+        ids = [item.current_upload_id for item in latest_report_uploads(cycle, project_id=project.pk)]
         counts = dict(NormalizedValue.objects.filter(upload_id__in=ids).values("report_code")
                       .annotate(n=Count("row_code", distinct=True)).values_list("report_code", "n"))
         tables = [dict(table, rows=counts.get(table["code"], 0)) for table in tables]
@@ -502,19 +498,13 @@ def report_catalog(request):
 
 @role_required("ADMIN")
 def management_report_drilldown(request, report_code):
-    cycle = active_cycle()
+    cycle = get_object_or_404(BudgetCycle, pk=request.GET["cycle"]) if request.GET.get("cycle", "").isdigit() else active_cycle()
     selected_project = _requested_report_project(request)
     row_code = request.GET.get("row_code") or request.GET.get("row") or ""
     period = request.GET.get("period") or ""
     current_ids = []
     if cycle:
-        current_ids = list(ProjectCycle.objects.filter(
-            cycle=cycle,
-            current_upload__cycle=cycle,
-            current_upload__project=F("project"),
-            current_upload__status=UploadVersion.Status.APPROVED,
-            project__is_active=True,
-        ).values_list("current_upload_id", flat=True))
+        current_ids = [item.current_upload_id for item in latest_report_uploads(cycle)]
     contributions = []
     total = f"{cents_to_yuan(0):,.2f}"
     zero = f"{cents_to_yuan(0):,.2f}"
@@ -1263,13 +1253,7 @@ def _aggregate_row(agg, unit, value_int, ratio_num, ratio_den):
 def _dashboard_data(cycle, report_code):
     if not cycle:
         return [], []
-    uploads = ProjectCycle.objects.filter(
-        cycle=cycle,
-        current_upload__cycle=cycle,
-        current_upload__project=F("project"),
-        current_upload__status=UploadVersion.Status.APPROVED,
-        project__is_active=True,
-    ).select_related("project", "current_upload").order_by("project__code")
+    uploads = latest_report_uploads(cycle)
     if not uploads:
         return [], []
     upload_ids = [u.current_upload_id for u in uploads]
@@ -1286,6 +1270,8 @@ def _dashboard_data(cycle, report_code):
         for rc, a in pr.items():
             c = comp.setdefault(rc, {"unit": None, "value_int": 0, "ratio_num": 0, "ratio_den": 0})
             _aggregate_row(c, a["unit"], a["value_int"], a["ratio_num"], a["ratio_den"])
+    if not per:
+        return [], []
     kpi_rows = _resolve_kpi_row(labels)
     kpis = []
     for kpi_label, rc in kpi_rows.items():

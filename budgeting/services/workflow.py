@@ -428,7 +428,7 @@ def _detail_for_rows(rows):
     }
 
 
-def _company_value_details(cycle, report_code):
+def _company_value_details(cycle, report_code, data_scope="approved"):
     grouped = defaultdict(list)
     if cycle is None:
         return {}
@@ -439,12 +439,15 @@ def _company_value_details(cycle, report_code):
         current_upload__status=UploadVersion.Status.APPROVED,
         project__is_active=True,
     ).values_list("current_upload_id", flat=True)
+    if data_scope == "latest":
+        from budgeting.services.trends import latest_report_uploads
+        current_ids = [item.current_upload_id for item in latest_report_uploads(cycle)]
     for value in NormalizedValue.objects.filter(upload_id__in=current_ids, report_code=report_code):
         grouped[(value.row_code, value.period)].append(value)
     return {key: _detail_for_rows(rows) for key, rows in grouped.items()}
 
 
-def project_value_details(project, cycle, report_code):
+def project_value_details(project, cycle, report_code, data_scope="approved"):
     """Return ``{(row_code, period): detail}`` for one project's approved upload."""
     if cycle is None:
         return {}
@@ -456,6 +459,9 @@ def project_value_details(project, cycle, report_code):
         current_upload__status=UploadVersion.Status.APPROVED,
         project__is_active=True,
     ).select_related("current_upload").first()
+    if data_scope == "latest":
+        from budgeting.services.trends import latest_report_uploads
+        pc = next(iter(latest_report_uploads(cycle, project_id=project.pk)), None)
     if not pc:
         return {}
     grouped = defaultdict(list)
@@ -513,7 +519,7 @@ def project_trend_rows(cycle, report_code, row_code):
     return rows
 
 
-def sub_table_reports(cycle):
+def sub_table_reports(cycle, data_scope="approved"):
     template = active_template(cycle)
     specs = []
     if template and template.file_path:
@@ -527,6 +533,9 @@ def sub_table_reports(cycle):
             current_upload__status=UploadVersion.Status.APPROVED,
             project__is_active=True,
         ).values_list("current_upload_id", flat=True)
+        if data_scope == "latest":
+            from budgeting.services.trends import latest_report_uploads
+            current_ids = [item.current_upload_id for item in latest_report_uploads(cycle)]
         counts = dict(
             NormalizedValue.objects.filter(upload_id__in=current_ids)
             .exclude(report_code__in=REPORTS)
@@ -534,6 +543,9 @@ def sub_table_reports(cycle):
             .annotate(n=Count("row_code", distinct=True))
             .values_list("report_code", "n")
         )
+    if data_scope == "latest":
+        known = {code for code, _ in specs}
+        specs.extend((code, code) for code in sorted(counts) if code not in known)
     return [
         {"code": code, "name": name, "rows": counts.get(code, 0)}
         for code, name in specs

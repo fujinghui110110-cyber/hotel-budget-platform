@@ -34,7 +34,7 @@
     <div>
       <span class="cockpit-kicker">当前报表</span>
       <strong>{{ report_name|default:report_code }}</strong>
-      <span>基于当前批准版本</span>
+      <span>基于当前预算版本最新可用上传</span>
     </div>
     <form class="cockpit-filter" method="get" action="{% url 'cockpit_dashboard' %}">
       <label for="report_code">报表</label>
@@ -48,7 +48,7 @@
     <div class="cockpit-section-head">
       <div>
         <h2 id="management-tasks-title">管理待办</h2>
-        <span class="cockpit-muted">已批准 {{ approved_projects|default:0 }} / 活跃 {{ active_projects|default:0 }} 个项目</span>
+        <span class="cockpit-muted">已读取 {{ approved_projects|default:0 }} / 活跃 {{ active_projects|default:0 }} 个项目</span>
       </div>
       <span class="cockpit-muted">点击进入对应处理队列</span>
     </div>
@@ -82,7 +82,7 @@
   <section class="cockpit-panel panel" aria-labelledby="project-title">
     <div class="cockpit-section-head">
       <h2 id="project-title">项目数据对比</h2>
-      <span class="cockpit-muted">仅展示 current_upload 已批准版本</span>
+      <span class="cockpit-muted">展示所选版本最新校验通过的上传</span>
     </div>
     {% if projects %}
       <div class="cockpit-table-wrap table-card table-scroll">
@@ -102,7 +102,7 @@
         </table>
       </div>
     {% else %}
-      <p class="cockpit-empty">暂无已批准项目数据。</p>
+      <p class="cockpit-empty">暂无可读取的项目汇总数据。</p>
     {% endif %}
   </section>
 

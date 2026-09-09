@@ -437,7 +437,7 @@ def build_drilldown(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WI
     if month is not None and not 1 <= month <= 12:
         month = None
     dimension = (year, kind, month)
-    uploads = approved_current_uploads(cycle, project_id=project_id)
+    uploads = (latest_report_uploads if data_scope == "latest" else approved_current_uploads)(cycle, project_id=project_id)
     rows_by_upload = _load_rows(uploads, metric, report_code)
     codes = set(_detail_source_codes(metric, report_code))
     projects = []
