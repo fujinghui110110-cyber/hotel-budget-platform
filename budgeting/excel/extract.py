@@ -145,15 +145,13 @@ def extract_report_values(upload, workbook_path, validation_run=None):
                 try:
                     numeric = Decimal(str(value))
                     valid = numeric.is_finite() and not isinstance(value, bool)
-                    if unit == NormalizedValue.Unit.COUNT:
-                        valid = valid and numeric == numeric.to_integral_value()
                 except InvalidOperation:
                     valid = False
                 if not valid:
                     if validation_run is not None:
                         ValidationIssue.objects.create(
                             run=validation_run, severity="P0", code="REPORT_VALUE_INVALID",
-                            message="报表值必须为有限数值，数量必须为整数。",
+                            message="报表值必须为有限数值，数量按四舍五入取整数。",
                             location=f"{sheet}!{cell_ref}", actual_value=str(value),
                         )
                     continue

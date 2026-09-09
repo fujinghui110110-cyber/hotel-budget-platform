@@ -34,13 +34,15 @@ class ExtractionV2Tests(TestCase):
             (root / "manifest.json").write_text(json.dumps(manifest))
             workbook.active["L32"] = 1.5
             workbook.save(root / "recalc.xlsx")
-            self.assertEqual(extract_report_values(upload, root / "recalc.xlsx", run), 0)
-            self.assertTrue(run.issues.filter(code="REPORT_VALUE_INVALID").exists())
+            self.assertEqual(extract_report_values(upload, root / "recalc.xlsx", run), 1)
+            self.assertFalse(run.issues.filter(code="REPORT_VALUE_INVALID").exists())
+            self.assertEqual(NormalizedValue.objects.get(upload=upload).value_int, 2)
             for invalid in ["非数值", True, "NaN", "Infinity"]:
                 with self.subTest(invalid=invalid):
                     workbook.active["L32"] = invalid
                     workbook.save(root / "recalc.xlsx")
                     run.issues.all().delete()
+                    NormalizedValue.objects.filter(upload=upload).delete()
                     self.assertEqual(extract_report_values(upload, root / "recalc.xlsx", run), 0)
                     self.assertTrue(run.issues.filter(code="REPORT_VALUE_INVALID").exists())
                     self.assertFalse(NormalizedValue.objects.filter(upload=upload).exists())
