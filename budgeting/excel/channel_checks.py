@@ -37,7 +37,7 @@ def validate_channel_values(workbook_path, run):
             if actual != expected:
                 letter = get_column_letter(column)
                 ValidationIssue.objects.get_or_create(run=run, code="CHANNEL_REVENUE_RECONCILIATION",
-                    location=f"{sheet_name}!{letter}{row}", defaults={"severity": "P0",
+                    location=f"{sheet_name}!{letter}{row}", defaults={"severity": "P2",
                     "message": f"渠道收入不等于渠道房价 × 房晚（{letter}{row - 64} × {letter}{row - 32}）。",
                     "actual_value": str(actual), "expected_value": str(expected)})
     workbook.close()

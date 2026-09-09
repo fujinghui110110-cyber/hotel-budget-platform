@@ -61,12 +61,15 @@ def validate_v2_structure(upload, path):
     expected_sheets, expected = _contents(source)
     sheets, values = _contents(path)
     issues = []
-    if sheets != expected_sheets:
-        issues.append(('P0', 'V2_SHEET_STRUCTURE', '工作表顺序、名称或可见性与签名模板不一致。'))
+    report_sheets = {report['sheet'] for report in manifest.get('reports', {}).values() if report.get('sheet')}
+    protected = report_sheets | {'SYS_META'} if report_sheets else {name for name, _ in expected_sheets}
+    actual_sheets = dict(sheets)
+    if any(actual_sheets.get(name) != state for name, state in expected_sheets if name in protected):
+        issues.append(('P0', 'V2_SHEET_STRUCTURE', '汇总工作表名称或可见性与签名模板不一致。'))
     editable = {(sheet, ref) for sheet, refs in manifest.get('input_cells', {}).items() for ref in refs}
     editable.update(('SYS_META', f'B{row}') for row in range(1, 7))
     for key in sorted(set(expected) | set(values)):
-        if key not in editable and values.get(key, '') != expected.get(key, ''):
+        if key[0] in protected and key not in editable and values.get(key, '') != expected.get(key, ''):
             issues.append(('P0', 'V2_SYSTEM_CELL_CHANGED', '非填报单元格发生变化。', '!'.join(key)))
             if len(issues) >= 30:
                 break

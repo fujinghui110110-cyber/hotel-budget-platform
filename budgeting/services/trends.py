@@ -34,6 +34,24 @@ def approved_current_uploads(cycle, project_id=None):
     return list(qs)
 
 
+def latest_report_uploads(cycle, project_id=None):
+    from types import SimpleNamespace
+    from budgeting.services.budget_versions import selected_project_upload
+
+    if not cycle:
+        return []
+    projects = Project.objects.filter(is_active=True).order_by("code")
+    if project_id:
+        projects = projects.filter(pk=project_id)
+    result = []
+    for project in projects:
+        upload = selected_project_upload(project, cycle)
+        if upload:
+            result.append(SimpleNamespace(project=project, project_id=project.pk,
+                                          current_upload=upload, current_upload_id=upload.pk))
+    return result
+
+
 def _dimension(value):
     year = value.data_year
     kind = (value.data_kind or "").upper() or None
@@ -262,13 +280,13 @@ def _aggregate(uploads, rows_by_upload, metric, report_code, dimension):
     return {"value": resolved, "value_int": resolved, "ratio_num": None, "ratio_den": None, "included_projects": len(project_ids), "project_ids": project_ids}
 
 
-def aggregate_metric(cycle, metric_code, report_code="PL_TOTAL_WINE", year=None, kind=None, month=None, project_id=None):
+def aggregate_metric(cycle, metric_code, report_code="PL_TOTAL_WINE", year=None, kind=None, month=None, project_id=None, data_scope="approved"):
     metric = _metric_for(metric_code, report_code)
     if not cycle:
         return {"value": None, "value_int": None, "ratio_num": None, "ratio_den": None, "included_projects": 0, "project_ids": [], "year": year, "kind": kind, "month": month, "unit": metric.get("unit"), "metric": metric_code, "report_code": report_code}
     year = int(year or cycle.budget_year)
     kind = (kind or "BUDGET").upper()
-    uploads = approved_current_uploads(cycle, project_id=project_id)
+    uploads = (latest_report_uploads if data_scope == "latest" else approved_current_uploads)(cycle, project_id=project_id)
     rows_by_upload = _load_rows(uploads, metric, report_code)
     result = _aggregate(uploads, rows_by_upload, metric, report_code, (year, kind, month))
     result.update({"year": year, "kind": kind, "month": month, "unit": metric.get("unit"), "metric": metric_code, "report_code": report_code})
@@ -293,10 +311,10 @@ def _load_rows(uploads, metric, report_code):
     return grouped
 
 
-def build_trend(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WINE", project_id=None, display_unit=None):
+def build_trend(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WINE", project_id=None, display_unit=None, data_scope="approved"):
     metric = _metric_for(metric_code, report_code)
     display_unit = normalize_display_unit(metric, display_unit)
-    uploads = approved_current_uploads(cycle, project_id=project_id)
+    uploads = (latest_report_uploads if data_scope == "latest" else approved_current_uploads)(cycle, project_id=project_id)
     rows_by_upload = _load_rows(uploads, metric, report_code)
     active_count = Project.objects.filter(is_active=True).count()
     if project_id:
@@ -408,7 +426,7 @@ def _source_detail(row):
     }
 
 
-def build_drilldown(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WINE", year=None, kind=None, month=None, project_id=None, display_unit=None):
+def build_drilldown(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WINE", year=None, kind=None, month=None, project_id=None, display_unit=None, data_scope="approved"):
     metric = _metric_for(metric_code, report_code)
     display_unit = normalize_display_unit(metric, display_unit)
     if not cycle:
@@ -492,7 +510,7 @@ def _rollup_months(monthly, metric):
     return {"value": value, "value_int": value, "ratio_num": None, "ratio_den": None, "included_projects": len(included), "project_ids": list(included)}
 
 
-def trend_payload(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WINE", project_id=None, display_unit=None):
+def trend_payload(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WINE", project_id=None, display_unit=None, data_scope="approved"):
     return build_trend(cycle, metric_code, report_code, project_id, display_unit)
 
 

@@ -1,3 +1,6 @@
+from django.test import TestCase
+from budgeting.models import BudgetCycle, Project, UploadVersion, NormalizedValue, User
+from budgeting.services.trends import aggregate_metric
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -38,3 +41,22 @@ class PlanningComparisonTests(SimpleTestCase):
             self.assertEqual(result,
                              [(year - 3, "ACTUAL"), (year - 2, "ACTUAL"),
                               (year - 1, "FORECAST"), (year, "BUDGET")])
+
+
+
+class LatestPlanningUploadTests(TestCase):
+    def test_submitted_upload_visible_without_approval_and_rejected_retry_ignored(self):
+        cycle = BudgetCycle.objects.create(name="预算", budget_year=2027)
+        project = Project.objects.create(code="LATEST", name="汇总项目")
+        upload = UploadVersion.objects.create(project=project, cycle=cycle, status="SUBMITTED")
+        NormalizedValue.objects.create(upload=upload, report_code="PL_TOTAL_WINE", row_code="R0032",
+            period="YEAR", data_year=2027, data_kind="BUDGET", unit="MONEY", value_int=123456789)
+        UploadVersion.objects.create(project=project, cycle=cycle, status="REJECTED")
+        self.assertIsNone(aggregate_metric(cycle, "revenue_total")["value"])
+        self.assertEqual(aggregate_metric(cycle, "revenue_total", data_scope="latest")["value"], 123456789)
+        admin = User.objects.create_user(username="overview-admin", role=User.Role.ADMIN)
+        self.client.force_login(admin)
+        response = self.client.get("/management/planning/", {"cycle":cycle.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["coverage"]["included"], 1)
+        self.assertContains(response, "最新可用上传")

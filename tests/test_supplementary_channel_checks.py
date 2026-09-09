@@ -148,13 +148,13 @@ class ChannelCheckTests(TestCase):
 
         self.assertFalse(ValidationIssue.objects.filter(run=self.run).exists())
 
-    def test_adr_times_room_nights_one_cent_difference_blocks(self):
+    def test_adr_times_room_nights_difference_is_supplementary_notice(self):
         directory, path = self._workbook_path(246.91)
         self.addCleanup(directory.cleanup)
 
         validate_channel_values(path, self.run)
 
         issue = ValidationIssue.objects.get(run=self.run, code="CHANNEL_REVENUE_RECONCILIATION")
-        self.assertEqual(issue.severity, "P0")
+        self.assertEqual(issue.severity, "P2")
         self.assertEqual(issue.location, "A1客房收入(新)!K101")
         self.assertEqual((issue.actual_value, issue.expected_value), ("246.91", "246.90"))

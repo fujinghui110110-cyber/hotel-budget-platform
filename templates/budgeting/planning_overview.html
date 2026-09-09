@@ -8,9 +8,10 @@
   {% if demo_mode %}<span class="planning-note">演示数据</span>{% endif %}
 </section>
 
+<p class="planning-note">数据口径：所选预算版本中各项目最新可用上传，包含已校验及已提交稿；无需先批准。附表保留在原始底稿中。</p>
 <section class="planning-filter" aria-label="预算口径筛选">
   <form method="get" action="/management/planning/">
-    <label>项目<select name="project_id" onchange="this.form.submit()"><option value="">公司汇总</option>{% for project in projects %}<option value="{{ project.pk }}"{% if selected_project_id == project.pk|stringformat:'s' %} selected{% endif %}>{{ project.code }} {{ project.name }}</option>{% endfor %}</select></label>
+    <label>项目<select name="project_id" onchange="this.form.submit()"><option value="">公司汇总</option>{% for project in projects %}<option value="{{ project.pk }}"{% if selected_project_id == project.pk %} selected{% endif %}>{{ project.code }} {{ project.name }}</option>{% endfor %}</select></label>
     <label>预算周期<select name="cycle" onchange="this.form.submit()">{% for item in cycles %}<option value="{{ item.pk }}"{% if cycle and item.pk == cycle.pk %} selected{% endif %}>{{ item.name }} · {{ item.budget_year }}预算</option>{% endfor %}</select></label>
     <label>指标<select name="metric" onchange="this.form.submit()">{% for item in metric_choices %}<option value="{{ item.code }}"{% if selected_metric == item.code %} selected{% endif %}>{{ item.label }}</option>{% endfor %}</select></label>
     <label>报表<select name="report_code" onchange="this.form.submit()">{% for item in report_choices %}<option value="{{ item.code }}"{% if report_code == item.code %} selected{% endif %}>{{ item.label }}</option>{% endfor %}</select></label>
@@ -22,7 +23,7 @@
 <section class="planning-kpis" aria-label="预算关键指标">
   {% for row in planning_rows|slice:":4" %}
   <article><span>{{ row.label }}</span><strong>{% with cell=row.cells|last %}{{ cell.display|default:"—" }}{% endwith %}</strong><small>对预测 <b>{{ row.change_display|default:row.delta_display|default:"—" }}</b></small></article>
-  {% empty %}<article class="planning-empty"><span>当前口径暂无预算数据</span><strong>—</strong><small>请先纳入已批准项目版本</small></article>{% endfor %}
+  {% empty %}<article class="planning-empty"><span>当前口径暂无预算数据</span><strong>—</strong><small>请先上传可识别的项目汇总表</small></article>{% endfor %}
 </section>
 
 <section class="panel planning-chart-panel" aria-labelledby="planning-trend-title">

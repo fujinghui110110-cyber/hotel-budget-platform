@@ -7,6 +7,7 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+from django.conf import settings
 from django.core import signing
 
 PROPRIETARY_FUNCS = ("DBS(", "VIEW(", "SUBNM(")
@@ -67,6 +68,21 @@ def validate_xlsx_zip(path):
         if any(name.startswith("xl/connections") for name in names):
             issues.append(("P0", "CONNECTION", "存在外部连接"))
     return issues
+
+
+def summary_sheet_names(upload):
+    template = upload.template
+    if template and template.manifest_path:
+        path = Path(template.manifest_path)
+        if not path.is_absolute():
+            path = settings.BASE_DIR / path
+        if path.exists():
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            sheets = {report["sheet"] for report in manifest.get("reports", {}).values() if report.get("sheet")}
+            if sheets:
+                return sheets
+    from budgeting.models import REPORTS
+    return set(REPORTS.values())
 
 
 def validate_upload_contract(upload, path):
@@ -138,9 +154,20 @@ def validate_upload_contract(upload, path):
                 )
                 break
     formulas, digest = formula_manifest(path)
-    if digest != template.formula_manifest_hash:
+    template_path = Path(template.file_path)
+    if not template_path.is_absolute():
+        template_path = settings.BASE_DIR / template_path
+    summary_sheets = summary_sheet_names(upload)
+    if template_path.exists():
+        expected_formulas, _ = formula_manifest(template_path)
+        formula_changed = [row for row in formulas if row["sheet"] in summary_sheets] != [
+            row for row in expected_formulas if row["sheet"] in summary_sheets
+        ]
+    else:
+        formula_changed = digest != template.formula_manifest_hash
+    if formula_changed:
         issues.append(
-            ("P0", "FORMULA_FINGERPRINT", "上传文件公式指纹与模板清单不一致。")
+            ("P0", "FORMULA_FINGERPRINT", "上传汇总表公式与模板清单不一致。")
         )
     for code, sheet in {
         "PL_TOTAL_WINE": "酒店损益总表（含名酒）",
@@ -161,7 +188,7 @@ def validate_upload_contract(upload, path):
     for error in cached_errors(path):
         issues.append(
             (
-                "P0",
+                "P0" if error["sheet"] in summary_sheets else "P2",
                 "EXCEL_ERROR",
                 f"发现 Excel 错误值 {error['value']}。",
                 f"{error['sheet']}!{error['cell']}",

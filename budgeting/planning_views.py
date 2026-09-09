@@ -12,7 +12,7 @@ from budgeting.models import BudgetCycle, NormalizedValue, Project, REPORTS
 from budgeting.services.metrics import METRICS
 from budgeting.services.template_delivery import signed_template_copy
 from budgeting.services.trends import (
-    _display_value, aggregate_metric, approved_current_uploads, build_trend,
+    _display_value, aggregate_metric, latest_report_uploads, build_trend,
     metric_choices,
 )
 
@@ -37,7 +37,7 @@ def _context(request):
     cycle = _cycle(request)
     project_id = _project_id(request)
     report = _report(request)
-    uploads = approved_current_uploads(cycle, project_id=project_id) if cycle else []
+    uploads = latest_report_uploads(cycle, project_id=project_id) if cycle else []
     upload_ids = [item.current_upload_id for item in uploads]
     demo = NormalizedValue.objects.filter(upload_id__in=upload_ids, source_cell="DEMO").exists()
     return {
@@ -53,9 +53,9 @@ def _context(request):
 
 
 def _comparison(cycle, code, report, project_id=None):
-    current = aggregate_metric(cycle, code, report, project_id=project_id)
+    current = aggregate_metric(cycle, code, report, project_id=project_id, data_scope="latest")
     prior = aggregate_metric(cycle, code, report, year=cycle.budget_year - 1,
-                             kind="FORECAST", project_id=project_id)
+                             kind="FORECAST", project_id=project_id, data_scope="latest")
     value, base = current["value"], prior["value"]
     if value is None or base is None:
         return "—", "缺少对照数据"
@@ -81,13 +81,13 @@ def planning_overview(request):
         selected = "revenue_total"
     rows = []
     for code in OVERVIEW_METRICS:
-        payload = build_trend(cycle, code, report, project_id, "wan")
+        payload = build_trend(cycle, code, report, project_id, "wan", data_scope="latest")
         delta, change = _comparison(cycle, code, report, project_id) if cycle else ("—", "—")
         rows.append({
             "metric": code, "label": payload["metric_label"], "unit": payload["unit_label"],
             "cells": payload["annual"], "delta_display": delta, "change_display": change,
         })
-    trend = build_trend(cycle, selected, report, project_id, "wan")
+    trend = build_trend(cycle, selected, report, project_id, "wan", data_scope="latest")
     context.update({
         "planning_rows": rows, "comparison_years": trend["years"],
         "trend_payload": trend, "selected_metric": selected,
@@ -100,7 +100,7 @@ def planning_overview(request):
 def planning_projects(request):
     context = _context(request)
     cycle, report = context["cycle"], context["report_code"]
-    uploads = {item.project_id: item.current_upload for item in approved_current_uploads(cycle)} if cycle else {}
+    uploads = {item.project_id: item.current_upload for item in latest_report_uploads(cycle)} if cycle else {}
     rows = []
     query = request.GET.get("q", "").strip()
     projects = context["projects"]
@@ -111,7 +111,7 @@ def planning_projects(request):
         row = {"project": project, "upload": uploads.get(project.pk)}
         for key, code in (("revenue", "revenue_total"), ("gop", "profit_gop"),
                           ("npi", "profit_npi"), ("occ", "occ"), ("adr", "adr")):
-            trend = build_trend(cycle, code, report, project.pk, "wan")
+            trend = build_trend(cycle, code, report, project.pk, "wan", data_scope="latest")
             row[f"{key}_display"] = trend["annual"][-1]["display"] if trend["annual"] else "—"
         row["growth_display"] = _comparison(cycle, "revenue_total", report, project.pk)[1] if cycle else "—"
         params = {"project_id": project.pk, "report_code": report}

@@ -196,9 +196,11 @@ def process_upload(upload):
         recalculated = recalc_with_libreoffice(source_path, settings.SOFFICE_BIN)
     except RecalcInfrastructureError as exc:
         raise InfrastructureProcessingError(str(exc)) from exc
+    from budgeting.excel.ooxml import summary_sheet_names
+    summary_sheets = summary_sheet_names(upload)
     for error in cached_errors(recalculated):
         ValidationIssue.objects.create(
-            run=run, severity="P0", code="RECALCULATED_EXCEL_ERROR",
+            run=run, severity="P0" if error["sheet"] in summary_sheets else "P2", code="RECALCULATED_EXCEL_ERROR",
             message=f"服务端重算产生 Excel 错误：{error['value']}。",
             location=f"{error['sheet']}!{error['cell']}",
         )
