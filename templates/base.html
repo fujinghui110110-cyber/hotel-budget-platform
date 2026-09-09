@@ -21,15 +21,15 @@
       {% if user.is_admin_role %}
       <nav class="side-nav">
         <a href="/management/planning/" class="{% if request.resolver_match.url_name == 'planning_overview' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/layout-dashboard.svg' %}" alt="">预算总览</a>
-        <a href="/management/project-budgets/" class="{% if request.resolver_match.url_name == 'planning_projects' or request.resolver_match.url_name == 'management_report' or request.resolver_match.url_name == 'report_catalog' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/building-2.svg' %}" alt="">项目预算</a>
-        <a href="{% url 'scenario_list' %}" class="{% if 'scenario' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calculator.svg' %}" alt="">预算测算</a>
+        <a href="{% url 'management_version_report' %}" class="{% if request.resolver_match.url_name == 'planning_projects' or 'version_report' in request.resolver_match.url_name or request.resolver_match.url_name == 'management_report' or request.resolver_match.url_name == 'report_catalog' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/building-2.svg' %}" alt="">项目预算</a>
+        <a href="{% url 'summary_list' %}" class="{% if 'scenario' in request.resolver_match.url_name or 'summary' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calculator.svg' %}" alt="">预算测算</a>
         <a href="{% url 'cockpit_trend' %}" class="{% if 'trend' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/chart-no-axes-combined.svg' %}" alt="">收入与成本分析</a>
         <a href="{% url 'cockpit_questions' %}" class="{% if 'question' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/messages-square.svg' %}" alt="">审核问答</a>
         <a href="/management/templates/" class="{% if request.resolver_match.url_name == 'planning_templates' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">模板与填报</a>
       </nav>
       <div class="side-nav side-nav--secondary">
         <span class="side-nav__caption">系统设置</span>
-        <a href="{% url 'management_cycles' %}" class="{% if request.resolver_match.url_name == 'management_cycles' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calendar-range.svg' %}" alt="">预算周期</a>
+        <a href="{% url 'management_budget_versions' %}" class="{% if 'management_budget_version' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calendar-range.svg' %}" alt="">预算版本</a>
         <a href="{% url 'management_org' %}" class="{% if request.resolver_match.url_name == 'management_org' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/users.svg' %}" alt="">组织与账号</a>
         <a href="{% url 'management_audit' %}" class="{% if request.resolver_match.url_name == 'management_audit' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/scroll-text.svg' %}" alt="">审计留痕</a>
       </div>
@@ -53,7 +53,7 @@
     <div class="app-stage">
       <header class="topbar">
         <nav class="breadcrumb" aria-label="面包屑导航">{% block breadcrumb %}<span>预算管理</span>{% endblock %}</nav>
-        <div class="topbar__meta">{% if cycle %}<form method="get" action="{{ request.path }}" class="topbar__year"><label for="global-cycle">编制年度</label>{% if cycles %}<select id="global-cycle" name="cycle" onchange="this.form.submit()">{% for item in cycles %}<option value="{{ item.pk }}"{% if item.pk == cycle.pk %} selected{% endif %}>{{ item.budget_year }} 预算</option>{% endfor %}</select>{% else %}<strong>{{ cycle.budget_year }} 预算</strong>{% endif %}</form>{% endif %}</div>
+        <div class="topbar__meta">{% if cycle %}<form method="get" action="{{ request.path }}" class="topbar__year"><label for="global-cycle">预算版本</label>{% if cycles %}<select id="global-cycle" name="cycle" onchange="this.form.submit()">{% for item in cycles %}<option value="{{ item.pk }}"{% if item.pk == cycle.pk %} selected{% endif %}>{{ item.budget_year }} · R{{ item.revision_no }}</option>{% endfor %}</select>{% else %}<strong>{{ cycle.budget_year }} · R{{ cycle.revision_no }}</strong>{% endif %}</form>{% endif %}</div>
       </header>
   {% endif %}
       <main id="main-content" class="main-content{% if not user.is_authenticated %} main-content--auth{% endif %}">

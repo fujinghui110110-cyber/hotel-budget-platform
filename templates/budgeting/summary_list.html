@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block title %}预算测算 · 酒店预算系统{% endblock %}
+{% block breadcrumb %}<span>管理端</span><span>/</span><span>预算测算</span>{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <p class="eyebrow">年度预算统筹</p><h1>预算测算</h1>
+  <p class="lede">选择项目，在年度汇总表上直接调整预算大数。公式自动联动，核对后下发项目。</p>
+</section>
+{% if error %}<div class="message message--error" role="alert">{{ error }}</div>{% endif %}
+<section class="panel">
+  <form method="get" class="form-row">
+    <div class="form-field"><label for="summary-cycle">预算版本</label><select id="summary-cycle" name="cycle">{% for item in cycles %}<option value="{{ item.pk }}" {% if item.pk == cycle.pk %}selected{% endif %}>{{ item.budget_year }} · R{{ item.revision_no }} · {{ item.get_status_display }}</option>{% endfor %}</select></div>
+    <div class="actions actions--end"><button class="button button--secondary">切换版本</button></div>
+  </form>
+  {% if cycle %}<form method="post" class="form-row" style="margin-top:24px">
+    {% csrf_token %}<input type="hidden" name="cycle" value="{{ cycle.pk }}">
+    <div class="form-field"><label for="summary-project">项目</label><select id="summary-project" name="project" required><option value="">请选择项目</option>{% for item in projects %}<option value="{{ item.project.pk }}" {% if not item.upload %}disabled{% endif %}>{{ item.project.name }}{% if not item.upload %}（暂无可用上报预算）{% endif %}</option>{% endfor %}</select></div>
+    <div class="form-field"><label for="summary-report">汇总表</label><select id="summary-report" name="report">{% for code,label in reports %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select></div>
+    <div class="actions actions--end"><button class="button button--primary">打开汇总表调整</button></div>
+  </form>{% else %}<p class="muted">请先在预算版本中开放填报。</p>{% endif %}
+</section>
+<section class="panel">
+  <div class="section-heading"><h2>调整记录</h2><a class="text-link" href="{% url 'scenario_list' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}">历史经营假设测算</a></div>
+  <div class="table-scroll"><table><thead><tr><th>项目</th><th>调整方案</th><th>状态</th><th>更新于</th><th>操作</th></tr></thead><tbody>
+  {% for item in scenarios %}<tr><th>{{ item.baseline.project.name }}</th><td>{{ item.name }}</td><td><span class="status status--{{ item.status|lower }}">{{ item.get_status_display }}</span></td><td>{{ item.updated_at|date:'m-d H:i' }}</td><td><a class="text-link" href="{% url 'summary_detail' item.pk %}">查看调整</a></td></tr>{% empty %}<tr><td colspan="5" class="empty-state">这个版本暂无调整记录。选择项目即可开始。</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}

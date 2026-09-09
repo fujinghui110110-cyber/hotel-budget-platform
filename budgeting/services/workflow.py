@@ -240,6 +240,26 @@ def submit_upload(upload, actor=None):
     return upload
 
 
+def _adjustment_line_value(upload, line):
+    values = NormalizedValue.objects.filter(
+        upload=upload,
+        report_code=line.report_code,
+        row_code=line.row_code,
+        period=line.period,
+    )
+    if (line.batch.cascade or {}).get("kind") != "summary_annual":
+        values = values.filter(unit=NormalizedValue.Unit.MONEY)
+    value = values.first()
+    if value is None:
+        return None
+    if value.unit == NormalizedValue.Unit.RATIO:
+        if value.ratio_den:
+            ratio = Decimal(value.ratio_num or 0) / Decimal(value.ratio_den)
+            return int((ratio * 10_000).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        return int(value.value_int or 0)
+    return int(value.value_int or 0)
+
+
 @transaction.atomic
 def approve_upload(upload, actor=None):
     upload = UploadVersion.objects.select_for_update().get(pk=upload.pk)
@@ -257,11 +277,8 @@ def approve_upload(upload, actor=None):
         project=upload.project, cycle=upload.cycle, status=AdjustmentLine.Status.OPEN,
         batch__status=AdjustmentBatch.Status.ISSUED,
     ):
-        value = NormalizedValue.objects.filter(
-            upload=upload, report_code=line.report_code, row_code=line.row_code,
-            period=line.period, unit=NormalizedValue.Unit.MONEY,
-        ).first()
-        if value is None or value.value_int != line.target_cents:
+        actual_value = _adjustment_line_value(upload, line)
+        if actual_value is None or actual_value != line.target_cents:
             raise ValueError(f"调整 {line.batch_id} 尚未精确落实到分，不能替换正式版本")
     pc, _ = ProjectCycle.objects.select_for_update().get_or_create(project=upload.project, cycle=upload.cycle, defaults={"current_upload": upload})
     old = pc.current_upload if pc.current_upload_id != upload.id else None
@@ -840,7 +857,8 @@ def issue_adjustment(batch, actor=None):
     batch.cycle = _lock_mutable_cycle(batch.cycle)
     if batch.status != AdjustmentBatch.Status.DRAFT:
         raise ValueError("只有草稿调整可以下发")
-    if (batch.cascade or {}).get("kind") == "fixed_cost_scenario":
+    cascade_kind = (batch.cascade or {}).get("kind")
+    if cascade_kind == "fixed_cost_scenario":
         expected = batch.cascade.get("report_deltas_cents", {})
         actual = {code: 0 for code in expected}
         for line in batch.lines.all():
@@ -849,6 +867,22 @@ def issue_adjustment(batch, actor=None):
                 raise ValueError("场景目标与明细差额不一致")
         if not expected or actual != expected or actual.get(batch.report_code) != batch.delta_cents:
             raise ValueError("场景各报表差额必须与测算结果逐分一致")
+    elif cascade_kind == "summary_annual":
+        lines = list(batch.lines.all())
+        if any(line.target_cents - line.baseline_cents != line.allocated_delta_cents for line in lines):
+            raise ValueError("汇总表目标与明细差额不一致")
+        reference = next(
+            (
+                line
+                for line in lines
+                if line.report_code == batch.report_code
+                and line.row_code == batch.row_code
+                and line.period == batch.period
+            ),
+            None,
+        )
+        if reference is None or reference.allocated_delta_cents != batch.delta_cents:
+            raise ValueError("汇总表批次差额与主调整项不一致")
     elif sum(line.allocated_delta_cents for line in batch.lines.all()) != batch.delta_cents:
         raise ValueError("项目差额合计必须精确等于批次差额")
     batch.status = AdjustmentBatch.Status.ISSUED
@@ -876,11 +910,10 @@ def cancel_adjustment(batch, actor=None):
 @transaction.atomic
 def update_adjustment_lines_for_upload(upload):
     cycle = _lock_mutable_cycle(upload.cycle)
-    open_lines = AdjustmentLine.objects.filter(project=upload.project, cycle=cycle, status=AdjustmentLine.Status.OPEN, batch__status=AdjustmentBatch.Status.ISSUED)
+    open_lines = AdjustmentLine.objects.filter(project=upload.project, cycle=cycle, status=AdjustmentLine.Status.OPEN, batch__status=AdjustmentBatch.Status.ISSUED).select_related("batch")
     for line in open_lines:
-        value = NormalizedValue.objects.filter(upload=upload, report_code=line.report_code, row_code=line.row_code, period=line.period).first()
         line.latest_upload = upload
-        line.latest_value_cents = int(value.value_int or 0) if value else None
+        line.latest_value_cents = _adjustment_line_value(upload, line)
         line.difference_cents = None if line.latest_value_cents is None else line.latest_value_cents - line.target_cents
         if line.difference_cents == 0 and upload.status == UploadVersion.Status.APPROVED:
             line.status = AdjustmentLine.Status.CONFIRMED

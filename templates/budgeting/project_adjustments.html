@@ -22,7 +22,9 @@
         <div class="section-heading">
           <div>
             <p class="eyebrow">调整批次</p>
-            {% if batch.cascade.kind == 'fixed_cost_scenario' %}
+            {% if batch.cascade.kind == 'summary_annual' %}
+                <h2 id="batch-{{ batch.pk }}">年度汇总预算调整 · R{{ batch.cycle.revision_no }}</h2>
+              {% elif batch.cascade.kind == 'fixed_cost_scenario' %}
             <h2 id="batch-{{ batch.pk }}">固定成本场景 · 四表修订目标</h2>
             {% elif batch.cascade.kind == 'full' %}
             <h2 id="batch-{{ batch.pk }}">全表调整：{{ batch.report_code|report_name }}</h2>
@@ -38,7 +40,9 @@
         {% if batch.reason %}<p class="muted">{{ batch.reason }}</p>{% endif %}
         {% if batch.due_date %}<p class="muted">期限：{{ batch.due_date }}</p>{% endif %}
 
-      {% if batch.cascade.kind == 'fixed_cost_scenario' %}
+      {% if batch.cascade.kind == 'summary_annual' %}
+            {% include 'budgeting/summary_project_changes.html' %}
+          {% elif batch.cascade.kind == 'fixed_cost_scenario' %}
       <p>全年客房收入目标 {{ batch.target_room_rev_cents|yuan }} 元 · 经济差额 {{ batch.delta_cents|yuan }} 元。成本费用绝对额保持不变；四表是同一经济变动的独立目标，不可再次相加。</p>
       <div class="table-card table-scroll">
         <table class="data-table">

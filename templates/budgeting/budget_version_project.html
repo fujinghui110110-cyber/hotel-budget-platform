@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} · {{ version_label }}{% endblock %}
+
+{% block breadcrumb %}<span>预算版本</span><span aria-hidden="true">/</span><span>{{ project.name }}</span>{% endblock %}
+
+{% block content %}
+<section class="page-heading page-heading--split">
+  <div><p class="eyebrow">{{ version_label }}</p><h1>{{ project.code }} {{ project.name }}</h1><p class="lede">查看项目在当前预算版本中的报表和原始底稿。</p></div>
+  <div class="actions actions--end"><a class="button button--ghost" href="{% url 'management_budget_versions' %}?cycle={{ cycle.pk }}">返回版本清单</a></div>
+</section>
+
+{% if upload %}
+<section class="summary-grid" aria-label="项目上传信息">
+  <article class="summary-card"><span class="summary-card__label">状态</span><strong>{{ upload.get_status_display }}</strong><small>{{ upload.created_at|date:"Y-m-d H:i" }}</small></article>
+  <article class="summary-card"><span class="summary-card__label">上传文件</span><strong>{{ upload.original_name }}</strong><small class="mono">{{ upload.sha256|slice:":12" }}</small></article>
+  <article class="summary-card"><span class="summary-card__label">预算版本</span><strong>{{ version_label }}</strong><small>版本信息由管理端发布</small></article>
+</section>
+
+{% if report_links %}
+<section class="panel" aria-labelledby="project-reports-title">
+  <div class="section-heading"><div><p class="eyebrow">预算报表</p><h2 id="project-reports-title">查看项目报表</h2></div></div>
+  <div class="report-link-grid">{% for report in report_links %}<a class="report-link" href="{{ report.url }}"><strong>{{ report.label }}</strong><span>打开本版数据</span></a>{% endfor %}</div>
+</section>
+<section class="panel" aria-labelledby="project-export-title">
+  <div class="section-heading"><div><p class="eyebrow">底稿导出</p><h2 id="project-export-title">导出本版文件</h2></div></div>
+  <div class="actions">
+    <a class="button button--secondary" href="{% url 'management_version_report_download' project.pk %}?cycle={{ cycle.pk }}">导出项目预算报表</a>
+    <a class="button button--ghost" href="{% url 'management_workpaper_download' project.pk 'original' %}?cycle={{ cycle.pk }}&amp;selection=historical&amp;upload_id={{ upload.pk }}">导出项目原始底稿</a>
+  </div>
+</section>
+{% else %}
+<p class="empty-state">该文件尚未通过校验，暂不能进入报表汇总。</p>
+{% endif %}
+{% else %}
+<p class="empty-state">该项目尚未上传 {{ version_label }} 的预算文件。</p>
+{% endif %}
+{% endblock %}

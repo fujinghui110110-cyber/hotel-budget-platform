@@ -9,7 +9,7 @@
   {% url 'project_dashboard' as project_dashboard_url %}
   {% url 'project_upload_new' as upload_new_url %}
   <section class="page-heading page-heading--split">
-    <div><p class="eyebrow">版本记录</p><h1>上传历史</h1><p class="lede">本项目的每一次上传、检查和提交都会保留版本记录，便于回溯。</p></div>
+  <div><p class="eyebrow">版本记录</p><h1>上传历史</h1><p class="lede">{% if cycle %}{{ version_label }} 内的每次上传、检查和提交都会保留。{% else %}当前没有对本项目开放的预算版本。{% endif %}</p></div>
     {% if upload_new_url %}<a class="button button--primary" href="{{ upload_new_url }}">新建上传</a>{% endif %}
   </section>
   <section class="panel" aria-labelledby="history-title">

@@ -294,6 +294,7 @@ def scenario_list(request):
             messages.success(request, f"已创建场景「{scenario.name}」。")
             return redirect("scenario_detail", scenario_id=scenario.pk)
     scenarios = _scenario_queryset().filter(baseline__cycle=cycle) if cycle else _scenario_queryset().none()
+    scenarios = scenarios.exclude(pk__in=BudgetScenario.objects.filter(inputs__kind="summary_annual").values("pk"))
     context = {
         "cycle": cycle,
         "cycles": BudgetCycle.objects.order_by("-budget_year", "-revision_no"),
@@ -332,6 +333,8 @@ def scenario_new(request):
 @_admin_required
 def scenario_detail(request, scenario_id):
     scenario = get_object_or_404(_scenario_queryset(), pk=scenario_id)
+    if scenario.inputs.get("kind") == "summary_annual":
+        return redirect("summary_detail", scenario_id=scenario.pk)
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "calculate":

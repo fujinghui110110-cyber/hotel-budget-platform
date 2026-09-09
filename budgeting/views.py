@@ -65,6 +65,7 @@ from budgeting.services.workflow import (
 )
 from budgeting.services.template_delivery import signed_template_copy
 from budgeting.services.report_labels import report_row_labels
+from budgeting.services.budget_versions import project_open_cycle, version_label
 
 
 HISTORY_PERIOD_RE = re.compile(r"^[AF]\d{4}$")
@@ -108,7 +109,7 @@ def home(request):
 
 @role_required("PROJECT")
 def project_home(request):
-    cycle = active_cycle()
+    cycle = project_open_cycle(request.user.project)
     uploads = UploadVersion.objects.filter(project=request.user.project, cycle=cycle) if cycle else []
     batches = []
     open_lines = []
@@ -123,6 +124,7 @@ def project_home(request):
         )
     return render(request, "budgeting/project_dashboard.html", {
         "cycle": cycle,
+        "version_label": version_label(cycle) if cycle else "",
         "uploads": uploads,
         "adjustment_batches": batches,
         "open_lines": open_lines,
@@ -131,7 +133,7 @@ def project_home(request):
 
 @role_required("PROJECT")
 def template_download(request):
-    cycle = active_cycle()
+    cycle = project_open_cycle(request.user.project)
     template = cycle.template if cycle and cycle.template_id else TemplateVersion.objects.filter(is_active=True).order_by("-created_at").first()
     if not cycle or not template:
         raise Http404("当前没有可下载模板")
@@ -141,7 +143,10 @@ def template_download(request):
 
 @role_required("PROJECT")
 def upload_new(request):
-    cycle = active_cycle()
+    cycle = project_open_cycle(request.user.project)
+    if cycle is None:
+        messages.info(request, "管理端尚未开放可上传的预算版本。")
+        return redirect("project_home")
     if request.method == "POST":
         form = UploadForm(request.POST, request.FILES)
         if form.is_valid():
@@ -161,7 +166,11 @@ def upload_new(request):
                 form.add_error("file", str(exc))
     else:
         form = UploadForm()
-    return render(request, "budgeting/project_upload_new.html", {"form": form, "cycle": cycle})
+    return render(request, "budgeting/project_upload_new.html", {
+        "form": form,
+        "cycle": cycle,
+        "version_label": version_label(cycle) if cycle else "",
+    })
 
 
 @login_required
@@ -185,20 +194,36 @@ def project_upload_detail(request, upload_id):
 def project_submit_upload(request, upload_id):
     upload = get_object_or_404(UploadVersion, id=upload_id, project=request.user.project)
     if request.method == "POST":
-        submit_upload(upload, request.user)
+        cycle = project_open_cycle(request.user.project)
+        if cycle is None or upload.cycle_id != cycle.pk:
+            messages.error(request, "该文件不属于当前开放的预算版本，不能提交。")
+        else:
+            submit_upload(upload, request.user)
     return redirect("project_upload_detail", upload.id)
 
 
 @role_required("PROJECT")
 def project_history(request):
-    cycle = active_cycle()
+    cycle = project_open_cycle(request.user.project)
     uploads = UploadVersion.objects.filter(project=request.user.project, cycle=cycle) if cycle else []
-    return render(request, "budgeting/project_history.html", {"uploads": uploads, "cycle": cycle})
+    return render(request, "budgeting/project_history.html", {
+        "uploads": uploads,
+        "cycle": cycle,
+        "version_label": version_label(cycle) if cycle else "",
+    })
 
 
 @role_required("PROJECT")
 def project_adjustments(request):
-    cycle = active_cycle()
+    cycles = BudgetCycle.objects.filter(
+        pk__in=AdjustmentBatch.objects.filter(
+            Q(project=request.user.project) | Q(lines__project=request.user.project)
+        ).values_list("cycle_id", flat=True)
+    ).order_by("-budget_year", "-revision_no")
+    if request.GET.get("cycle"):
+        cycle = get_object_or_404(cycles, pk=request.GET["cycle"])
+    else:
+        cycle = project_open_cycle(request.user.project) or cycles.first()
     batches = []
     if cycle:
         batches = list(
@@ -219,7 +244,7 @@ def project_adjustments(request):
     return render(
         request,
         "budgeting/project_adjustments.html",
-        {"adjustment_batches": batches, "batches": batches, "cycle": cycle},
+        {"adjustment_batches": batches, "batches": batches, "cycle": cycle, "cycles": cycles},
     )
 
 

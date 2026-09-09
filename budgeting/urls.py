@@ -4,9 +4,16 @@ from budgeting import views
 from budgeting import cockpit_views
 from budgeting import planning_views
 from budgeting import workpaper_views
+from budgeting import version_report_views, summary_views
 
 
 urlpatterns = [
+    path("", include("budgeting.version_urls")),
+    path("management/summary-adjustments/", summary_views.summary_list, name="summary_list"),
+    path("management/summary-adjustments/<uuid:scenario_id>/", summary_views.summary_detail, name="summary_detail"),
+    path("management/version-reports/", version_report_views.version_report, name="management_version_report"),
+    path("management/version-reports/<int:project_id>/download/", version_report_views.version_report_download, name="management_version_report_download"),
+    path("management/version-reports/download-all/", version_report_views.version_report_batch_download, name="management_version_report_batch_download"),
     path("management/planning/", planning_views.planning_overview, name="planning_overview"),
     path("management/project-budgets/", planning_views.planning_projects, name="planning_projects"),
     path("management/templates/", planning_views.planning_templates, name="planning_templates"),

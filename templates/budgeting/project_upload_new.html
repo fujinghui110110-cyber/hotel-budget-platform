@@ -9,7 +9,8 @@
   {% url 'project_dashboard' as project_dashboard_url %}
   <section class="page-heading">
     <p class="eyebrow">上传套表</p>
-    <h1>上传预算套表</h1>
+  <h1>上传预算套表</h1>
+  {% if cycle %}<p><span class="badge">{{ version_label }}</span> 版本号由管理端发布，本项目不可修改。</p>{% endif %}
     <p class="lede">当前周期：{% if current_cycle %}{{ current_cycle.name|default:'暂无开放周期' }}{% elif project_cycle %}{{ project_cycle.name|default:'暂无开放周期' }}{% elif cycle %}{{ cycle.name|default:'暂无开放周期' }}{% else %}暂无开放周期{% endif %}。上传后系统会保存原文件并开始校验。</p>
   </section>
   <section class="panel narrow-panel" aria-labelledby="upload-form-title">

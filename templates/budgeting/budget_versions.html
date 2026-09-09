@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}预算版本 · 酒店预算系统{% endblock %}
+
+{% block breadcrumb %}<span>预算统筹</span><span aria-hidden="true">/</span><span>预算版本</span>{% endblock %}
+
+{% block content %}
+<section class="page-heading page-heading--split">
+  <div>
+    <p class="eyebrow">版本统筹</p>
+    <h1>预算版本</h1>
+    <p class="lede">开放一个版本后，项目只能查看版本信息并上传本版预算。</p>
+  </div>
+  {% if cycle %}
+  <div class="actions actions--end">
+    <a class="button button--secondary" href="{% url 'management_version_report_batch_download' %}?cycle={{ cycle.pk }}">一键导出全部项目预算报表</a>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel" aria-labelledby="open-version-title">
+  <div class="section-heading">
+    <div><p class="eyebrow">发布</p><h2 id="open-version-title">开放新版本</h2></div>
+  </div>
+  <form method="post" action="{% url 'management_budget_version_open' %}" class="filter-bar">
+    {% csrf_token %}
+    <label class="compact-field">预算年度<input type="number" name="budget_year" min="2000" max="2200" required placeholder="例如 2027"></label>
+    <label class="compact-field">版本名称（可选）<input type="text" name="name" maxlength="120" placeholder="例如 2027 年度预算"></label>
+    <button class="button button--primary" type="submit" data-confirm="开放后项目即可上传该版本，确认继续？">开放版本</button>
+  </form>
+  <p class="table-footnote"><span aria-hidden="true">i</span>系统自动生成当年下一个 R 版本；开放新版本时会停止当年旧版本上传，历史数据仍保留。</p>
+</section>
+
+{% if cycles %}
+<section class="summary-grid" aria-label="版本填报概况">
+  <article class="summary-card"><span class="summary-card__label">当前查看</span><strong>{{ version_label }}</strong><small>{{ cycle.get_status_display }}</small></article>
+  <article class="summary-card"><span class="summary-card__label">已上传</span><strong>{{ uploaded_count }} / {{ project_count }}</strong><small>本版真实上传</small></article>
+  <article class="summary-card"><span class="summary-card__label">可查看报表</span><strong>{{ reportable_count }}</strong><small>已校验、已提交或已批准</small></article>
+</section>
+
+<section class="panel" aria-labelledby="version-project-title">
+  <div class="section-heading">
+    <div><p class="eyebrow">项目填报</p><h2 id="version-project-title">本版项目状态</h2></div>
+    <form method="get"><label class="compact-field">选择版本<select name="cycle" onchange="this.form.submit()">{% for item in cycles %}<option value="{{ item.pk }}"{% if item.pk == cycle.pk %} selected{% endif %}>{{ item.budget_year }} 年预算 R{{ item.revision_no }} · {{ item.get_status_display }}</option>{% endfor %}</select></label></form>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <caption class="sr-only">当前预算版本项目上传状态</caption>
+      <thead><tr><th scope="col">项目</th><th scope="col">上传状态</th><th scope="col">最新文件</th><th scope="col">上传时间</th><th scope="col">操作</th></tr></thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>
+          <th scope="row"><strong>{{ row.project.code }} {{ row.project.name }}</strong></th>
+          <td>{% if row.latest_upload %}<span class="status status--{{ row.latest_upload.status|lower }}">{{ row.latest_upload.get_status_display }}</span>{% else %}<span class="status">未上传</span>{% endif %}</td>
+          <td>{{ row.latest_upload.original_name|default:"—" }}</td>
+          <td>{{ row.latest_upload.created_at|date:"Y-m-d H:i"|default:"—" }}</td>
+          <td>{% if row.can_view_report %}<a class="text-link" href="{% url 'management_version_report' %}?cycle={{ cycle.pk }}&amp;project_id={{ row.project.pk }}">查看报表与导出</a>{% if row.latest_upload.pk != row.report_upload.pk %}<small class="muted">报表使用最近合格稿，最新文件尚不可用</small>{% endif %}{% elif row.latest_upload %}<span class="muted">尚无可用报表稿</span>{% else %}<span class="muted">等待项目上传</span>{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="empty-state">暂无启用项目。</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if version_is_open %}
+<section class="panel panel--muted">
+  <form method="post" action="{% url 'management_budget_version_close' cycle.pk %}">{% csrf_token %}<button class="button button--ghost" type="submit" data-confirm="关闭后项目将无法继续上传本版，确认继续？">停止本版上传</button></form>
+</section>
+{% endif %}
+{% else %}
+<p class="empty-state">尚未建立预算版本，请先开放首个年度预算版本。</p>
+{% endif %}
+{% endblock %}

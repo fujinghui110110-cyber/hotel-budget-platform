@@ -33,9 +33,9 @@
       {% else %}<strong>暂无开放周期</strong><small>—</small>{% endif %}
     </article>
     <article class="summary-card">
-      <span class="summary-card__label">预算版本</span>
-      <strong>{{ uploads|length|default:'0' }}</strong>
-      <small>本周期留痕记录</small>
+    <span class="summary-card__label">开放的预算版本</span>
+    <strong>{{ version_label|default:'暂无开放版本' }}</strong>
+    <small>版本号由管理端发布，项目不可修改</small>
     </article>
   </section>
 

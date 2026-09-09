@@ -1,0 +1,29 @@
+{% extends 'base.html' %}{% load static %}
+{% block title %}{{ scenario.baseline.project.name }} · 汇总表调整{% endblock %}
+{% block breadcrumb %}<a href="{% url 'summary_list' %}?cycle={{ cycle.pk }}">预算测算</a><span>/</span><span>{{ scenario.baseline.project.name }}</span>{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'css/summary-editor.css' %}">
+<section class="page-heading page-heading--split">
+  <div><p class="eyebrow">{{ cycle.budget_year }} 预算 · R{{ cycle.revision_no }}</p><h1>{{ scenario.baseline.project.name }}</h1><p class="lede">{{ report_name }} · 年度汇总调整</p></div>
+  <a class="button button--secondary" href="{% url 'summary_list' %}?cycle={{ cycle.pk }}">切换项目</a>
+</section>
+{% if error %}<div class="message message--error" role="alert">{{ error }}</div>{% endif %}
+<div class="summary-guide"><span>金额单位：元 · 比率单位：% · 缺失为 —</span><span>浅金底可填写 · 公式行自动计算</span><span>来源：{{ scenario.baseline.created_at|date:'m-d H:i' }} 上报 · {{ scenario.baseline.original_name }}</span></div>
+<label class="summary-history-toggle"><input type="checkbox" id="summary-history-toggle"> 显示前两年实际与今年预测</label>
+<form method="post" id="summary-form">
+{% csrf_token %}
+<div class="summary-table-wrap"><table class="summary-table">
+  <caption class="sr-only">年度预算汇总表及调整前后比较</caption>
+  <thead><tr><th scope="col">预算指标</th><th scope="col">{{ cycle.budget_year }}<small>项目上报</small></th><th scope="col" class="summary-target">{{ cycle.budget_year }}<small>调整后预算</small></th><th scope="col">变化额<small>比率为百分点</small></th>{% for year in history_years %}<th scope="col" class="summary-history">{{ year }}<small>{% if forloop.last %}预测{% else %}实际{% endif %}</small></th>{% endfor %}</tr></thead>
+  <tbody>{% for row in rows %}<tr class="{% if row.changed %}summary-changed{% endif %} {% if not row.editable %}summary-formula{% endif %}" data-row="{{ row.code }}">
+    <th scope="row"><span>{{ row.label }}</span><small>{{ row.unit_label }}{% if not row.editable %} · 公式联动{% endif %}</small>{% if row.formula %}<details><summary>勾稽公式</summary><span class="summary-formula-text">{{ row.formula }}</span></details>{% endif %}</th>
+    <td>{{ row.before_display }}</td>
+    <td class="summary-target">{% if row.editable and not issued %}<input type="text" inputmode="decimal" name="value_{{ row.code }}" value="{{ row.input_value }}" data-initial="{{ row.input_value }}" aria-label="{{ row.label }} 调整后预算" autocomplete="off">{% else %}<strong>{{ row.after_display }}</strong>{% endif %}</td>
+    <td class="summary-delta">{{ row.delta_display }}</td>{% for item in row.history %}<td class="summary-history">{{ item.display }}</td>{% endfor %}
+  </tr>{% empty %}<tr><td colspan="7" class="empty-state">该汇总表没有可用年度数据。</td></tr>{% endfor %}</tbody>
+</table></div>
+<section class="panel summary-reason"><label for="summary-reason">调整说明，下发后项目可见</label><textarea id="summary-reason" name="reason" rows="2" placeholder="说明重点调整及编制要求，例如：控制行政费用，补充收入增长依据。" {% if issued %}readonly{% endif %}>{{ reason }}</textarea></section>
+<div class="summary-actions"><div><strong id="summary-save-state">{% if issued %}已下发项目{% else %}{{ changed_count }} 项变化{% endif %}</strong><small>原预算保留；下发年度目标后，由项目完善月度及分表。</small></div><div class="actions">{% if not issued %}<button type="submit" name="action" value="calculate" class="button button--secondary">保存并计算</button><button type="submit" name="action" value="issue" id="summary-issue" class="button button--primary" {% if scenario.status != 'READY' or not changed_count %}disabled{% endif %}>下发项目</button>{% else %}<a class="button button--secondary" href="{% url 'summary_list' %}?cycle={{ cycle.pk }}">返回测算</a>{% endif %}</div></div>
+</form>
+<script src="{% static 'js/summary-editor.js' %}" defer></script>
+{% endblock %}

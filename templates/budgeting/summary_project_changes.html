@@ -1,0 +1,9 @@
+{% load summary_tags %}
+<p>管理端已下发年度汇总目标。金额单位为元，比率单位为 %。请据此完善月度和分表，再按开放版本上传预算。</p>
+<div class="table-scroll"><table class="data-table" style="min-width:0;width:100%;table-layout:fixed">
+<thead><tr><th style="min-width:100px">重点改动</th><th>项目上报</th><th>调整目标</th><th>变化额</th></tr></thead><tbody>
+{% for change in batch.cascade.changes %}{% if change.entered %}<tr><th>{{ change.label }}{% if change.unit == 'RATIO' %}（%）{% endif %}</th><td>{{ change.before|summary_value:change.unit }}</td><td><strong>{{ change.after|summary_value:change.unit }}</strong></td><td>{{ change.delta|summary_value:change.unit }}</td></tr>{% endif %}{% endfor %}
+</tbody></table></div>
+<details style="margin-top:16px"><summary>查看公式自动联动的变化</summary><div class="table-scroll"><table class="data-table"><thead><tr><th>指标</th><th>原预算</th><th>调整目标</th><th>变化额</th><th>勾稽公式</th></tr></thead><tbody>
+{% for change in batch.cascade.changes %}{% if not change.entered %}<tr><th>{{ change.label }}</th><td>{{ change.before|summary_value:change.unit }}</td><td>{{ change.after|summary_value:change.unit }}</td><td>{{ change.delta|summary_value:change.unit }}</td><td>{{ change.formula }}</td></tr>{% endif %}{% endfor %}
+</tbody></table></div></details>
