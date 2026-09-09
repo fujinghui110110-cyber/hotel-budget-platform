@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% load budget_tags %}
+
+{% block title %}{{ report_name|default:report_code|default:"管理报表" }} · 酒店预算与损益管理平台{% endblock %}
+
+{% block breadcrumb %}
+  {% if user.is_admin_role %}
+    <a href="{% url 'report_catalog' %}">全部报表</a><span aria-hidden="true">/</span>
+  {% else %}
+    <a href="{% url 'project_report_catalog' %}">全部报表</a><span aria-hidden="true">/</span>
+  {% endif %}
+  <span>{{ report_name|default:report_code|default:"管理报表" }}</span>
+{% endblock %}
+
+{% block content %}
+  {% if user.is_admin_role %}
+    {% url 'management_report_drilldown' report_code as drilldown_url %}
+  {% endif %}
+  <section class="page-heading page-heading--split">
+    <div>
+      <p class="eyebrow">财务报表</p>
+      <h1>{{ report_name|default:report_code|default:"管理报表" }}</h1>
+      <p class="lede">{{ report_scope|default:"公司正式汇总" }} · 当前周期汇总，金额单位：元。</p>
+    </div>
+    <div class="actions actions--end">
+      {% if user.is_admin_role and first_row_code and first_period %}
+        <a class="button button--secondary" href="{{ drilldown_url }}?row_code={{ first_row_code|urlencode }}&amp;period={{ first_period|urlencode }}{% if selected_project %}&amp;project_id={{ selected_project.id }}{% endif %}">查看首项穿透</a>
+      {% endif %}
+      {% if selected_project %}
+        <span class="badge">项目：{{ selected_project.code }} {{ selected_project.name }}</span>
+      {% else %}
+        <span class="badge">公司正式汇总</span>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if user.is_admin_role %}
+    {% url 'management_report' 'PL_TOTAL_WINE' as report_total_wine_url %}
+    {% url 'management_report' 'PL_TOTAL_NOWINE' as report_total_nowine_url %}
+    {% url 'management_report' 'PL_ZZ_WINE' as report_zz_wine_url %}
+    {% url 'management_report' 'PL_ZZ_NOWINE' as report_zz_nowine_url %}
+  {% else %}
+    {% url 'project_report' 'PL_TOTAL_WINE' as report_total_wine_url %}
+    {% url 'project_report' 'PL_TOTAL_NOWINE' as report_total_nowine_url %}
+    {% url 'project_report' 'PL_ZZ_WINE' as report_zz_wine_url %}
+    {% url 'project_report' 'PL_ZZ_NOWINE' as report_zz_nowine_url %}
+  {% endif %}
+  <nav class="report-tabs" aria-label="四张管理报表">
+    <a class="{% if report_code == 'PL_TOTAL_WINE' %}is-active{% endif %}" href="{{ report_total_wine_url }}{{ project_scope_query }}">总表 · 含名酒</a>
+    <a class="{% if report_code == 'PL_TOTAL_NOWINE' %}is-active{% endif %}" href="{{ report_total_nowine_url }}{{ project_scope_query }}">总表 · 不含名酒</a>
+    <a class="{% if report_code == 'PL_ZZ_WINE' %}is-active{% endif %}" href="{{ report_zz_wine_url }}{{ project_scope_query }}">拆中智 · 含名酒</a>
+    <a class="{% if report_code == 'PL_ZZ_NOWINE' %}is-active{% endif %}" href="{{ report_zz_nowine_url }}{{ project_scope_query }}">拆中智 · 不含名酒</a>
+  </nav>
+
+  <form method="get" class="planning-filter report-period-filter">
+    {% if selected_project %}<input type="hidden" name="project_id" value="{{ selected_project.pk }}">{% endif %}
+    {% if cycle %}<input type="hidden" name="cycle" value="{{ cycle.pk }}">{% endif %}
+    <label for="report-period-scope">数据期间</label>
+    <select id="report-period-scope" name="period_scope" aria-label="数据期间" onchange="this.form.submit()">
+      {% for option in period_options %}<option value="{{ option.value }}"{% if option.value == period_scope %} selected{% endif %}>{{ option.label }}</option>{% endfor %}
+    </select>
+  </form>
+
+  <section class="report-table-section" aria-labelledby="report-table-title">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">报表明细</p>
+        <h2 id="report-table-title">{{ report_name|default:"管理报表" }}</h2>
+      </div>
+      <span class="section-heading__hint">横向滚动查看全部期间</span>
+    </div>
+    <div class="table-card">
+      <div class="table-scroll" tabindex="0" aria-label="可横向滚动的财务报表">
+        <table class="report-table">
+          <caption class="sr-only">{{ report_name|default:"管理报表" }}金额明细</caption>
+          <thead>
+            <tr>
+              <th scope="col">科目名称</th>
+              {% for period in periods %}<th scope="col" class="num">{{ period_labels|get_item:period }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% if row_codes %}
+              {% for row in row_codes %}
+                <tr>
+                  <th scope="row">{{ row.label|default:row.code|default:"—" }}</th>
+                  {% for period in periods %}
+                    <td class="num">
+                      {% if user.is_admin_role %}<a class="text-link" href="{{ drilldown_url }}?row_code={{ row.code|urlencode }}&amp;period={{ period|urlencode }}{% if selected_project %}&amp;project_id={{ selected_project.id }}{% endif %}">{% endif %}
+                      {% report_value values row.code period units %}
+                      {% if user.is_admin_role %}</a>{% endif %}
+                    </td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            {% elif rows %}
+              {% for row in rows %}
+                <tr>
+                  <th scope="row">{{ row.name|default:row.row_label|default:row.row_code|default:"—" }}</th>
+                  {% for value in row.values %}<td class="num">{{ value|default:"—" }}</td>{% endfor %}
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr><td colspan="{{ periods|length|add:'1' }}" class="empty-state">当前报表暂无可汇总数据。</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+{% endblock %}

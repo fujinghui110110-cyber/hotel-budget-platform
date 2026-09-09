@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}组织与账号 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}<span>管理端</span><span aria-hidden="true">/</span><span>组织与账号</span>{% endblock %}
+{% block content %}
+  <section class="page-heading page-heading--split">
+    <div>
+      <p class="eyebrow">组织架构</p>
+      <h1>组织与账号</h1>
+      <p class="lede">维护项目与账号：一个项目绑定一个项目端账号，账号密码由管理员统一维护。</p>
+    </div>
+  </section>
+
+  <div class="two-column-layout">
+    <section class="panel" aria-labelledby="project-list-title">
+      <div class="section-heading"><div><p class="eyebrow">项目</p><h2 id="project-list-title">项目清单</h2></div><span class="badge">{{ projects|length }} 个项目</span></div>
+      <div class="table-scroll">
+        <table>
+          <caption class="sr-only">项目清单</caption>
+          <thead><tr><th scope="col">编码</th><th scope="col">名称</th><th scope="col">状态</th></tr></thead>
+          <tbody>
+            {% for project in projects %}
+              <tr>
+                <th scope="row" class="mono">{{ project.code }}</th>
+                <td>{{ project.name }}</td>
+                <td>{% if project.is_active %}<span class="status status--approved">启用</span>{% else %}<span class="status status--unknown">停用</span>{% endif %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="empty-state">暂无项目。</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="account-list-title">
+      <div class="section-heading"><div><p class="eyebrow">账号</p><h2 id="account-list-title">项目账号</h2></div><span class="badge">{{ accounts|length }} 个账号</span></div>
+      <div class="table-scroll">
+        <table>
+          <caption class="sr-only">项目账号清单</caption>
+          <thead><tr><th scope="col">账号</th><th scope="col">绑定项目</th></tr></thead>
+          <tbody>
+            {% for account in accounts %}
+              <tr><th scope="row" class="mono">{{ account.username }}</th><td>{{ account.project.code }} {{ account.project.name }}</td></tr>
+            {% empty %}
+              <tr><td colspan="2" class="empty-state">暂无项目账号。</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="two-column-layout">
+    <section class="panel" aria-labelledby="new-project-title">
+      <h2 id="new-project-title">新建项目</h2>
+      <form method="post" class="form-stack">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_project">
+        {{ project_form.as_p }}
+        <button class="button button--primary" type="submit">创建项目</button>
+      </form>
+    </section>
+
+    <section class="panel" aria-labelledby="new-account-title">
+      <h2 id="new-account-title">新建账号</h2>
+      <form method="post" class="form-stack">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_account">
+        {{ account_form.as_p }}
+        <button class="button button--primary" type="submit">创建账号</button>
+      </form>
+    </section>
+
+    <section class="panel" aria-labelledby="reset-password-title">
+      <h2 id="reset-password-title">重置密码</h2>
+      <form method="post" class="form-stack">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reset_password">
+        {{ reset_form.as_p }}
+        <button class="button button--secondary" type="submit">重置密码</button>
+      </form>
+    </section>
+  </div>
+{% endblock %}

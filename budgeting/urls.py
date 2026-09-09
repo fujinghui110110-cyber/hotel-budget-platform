@@ -1,0 +1,63 @@
+from django.urls import include, path
+
+from budgeting import views
+from budgeting import cockpit_views
+from budgeting import planning_views
+from budgeting import workpaper_views
+
+
+urlpatterns = [
+    path("management/planning/", planning_views.planning_overview, name="planning_overview"),
+    path("management/project-budgets/", planning_views.planning_projects, name="planning_projects"),
+    path("management/templates/", planning_views.planning_templates, name="planning_templates"),
+    path("management/templates/<int:project_id>/download/", planning_views.planning_template_download, name="planning_template_download"),
+    path("management/workpapers/", workpaper_views.workpaper_exports, name="management_workpaper_exports"),
+    path(
+        "management/workpapers/<int:project_id>/<str:artifact>/download/",
+        workpaper_views.workpaper_download,
+        name="management_workpaper_download",
+    ),
+    path(
+        "management/workpapers/batch/download/",
+        workpaper_views.workpaper_batch_download,
+        name="management_workpaper_batch_download",
+    ),
+    path("", include("budgeting.reference_urls")),
+    path("", include("budgeting.issue_urls")),
+    path("", include("budgeting.cockpit_urls")),
+    path("", include("budgeting.scenario_urls")),
+    path("", views.home, name="home"),
+    path("project/", views.project_home, name="project_home"),
+    path("project/", views.project_home, name="project_dashboard"),
+    path("project/template/", views.template_download, name="project_template"),
+    path("project/template/", views.template_download, name="project_template_download"),
+    path("project/uploads/new", views.upload_new, name="project_upload_new"),
+    path("project/uploads/<uuid:upload_id>/", views.project_upload_detail, name="project_upload_detail"),
+    path("project/uploads/<uuid:upload_id>/submit", views.project_submit_upload, name="project_submit_upload"),
+    path("project/uploads/<uuid:upload_id>/submit", views.project_submit_upload, name="project_upload_submit"),
+    path("project/adjustments/", views.project_adjustments, name="project_adjustments"),
+    path("project/history/", views.project_history, name="project_history"),
+    path("project/reports/", views.report_catalog, name="project_report_catalog"),
+    path("project/reports/<str:report_code>/", views.project_report, name="project_report"),
+    path("management/cycles/", views.management_cycles, name="management_cycles"),
+    path("management/cycles/<int:cycle_id>/reopen/", views.management_cycle_reopen, name="management_cycle_reopen"),
+    path("management/projects/", views.management_projects, name="management_projects"),
+    path("management/dashboard/", cockpit_views.management_dashboard, name="management_dashboard"),
+    path("management/trend/", cockpit_views.management_trend, name="management_trend"),
+    path("management/reports/", views.report_catalog, name="report_catalog"),
+    path("management/reports/<str:report_code>/", views.management_report, name="management_report"),
+    path("management/reports/<str:report_code>/drilldown", views.management_report_drilldown, name="management_report_drilldown"),
+    path("management/uploads/<uuid:upload_id>/approve", views.approve_upload_view, name="management_approve_upload"),
+    path("management/uploads/<uuid:upload_id>/approve", views.approve_upload_view, name="management_upload_approve"),
+    path("management/uploads/<uuid:upload_id>/reject", views.reject_upload_view, name="management_reject_upload"),
+    path("management/org/", views.management_org, name="management_org"),
+    path("management/adjustments/", views.management_adjustments, name="management_adjustments"),
+    path("management/adjustments/<int:batch_id>/issue", views.management_adjustment_issue, name="management_adjustment_issue"),
+    path("management/freeze/", views.management_freeze, name="management_freeze"),
+    path("management/audit/", views.management_audit, name="management_audit"),
+    path("management/snapshots/<uuid:snapshot_id>/download", views.snapshot_download, name="snapshot_download"),
+    path("management/snapshots/<uuid:snapshot_id>/download", views.snapshot_download, name="management_snapshot_download"),
+    path("api/uploads/<uuid:upload_id>/status", views.upload_status, name="upload_status"),
+    path("api/uploads/<uuid:upload_id>/status", views.upload_status, name="upload_status_api"),
+    path("healthz", views.healthz, name="healthz"),
+]

@@ -1,0 +1,32 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>酒店预算与损益管理平台</title>
+  <link rel="stylesheet" href="{% static 'budgeting/style.css' %}">
+</head>
+<body>
+  <header class="topbar">
+    <a href="/">酒店预算与损益管理平台</a>
+    <nav>
+      {% if user.is_authenticated and user.is_admin_role %}
+        <a href="/management/projects/">项目进度</a>
+        <a href="/management/reports/PL_TOTAL_WINE/">四表汇总</a>
+        <a href="/management/adjustments/">管理调整</a>
+        <a href="/management/freeze/">冻结</a>
+      {% elif user.is_authenticated %}
+        <a href="/project/">首页</a>
+        <a href="/project/uploads/new">上传</a>
+        <a href="/project/adjustments/">调整任务</a>
+        <a href="/project/history/">历史</a>
+      {% endif %}
+      {% if user.is_authenticated %}
+        <form method="post" action="/logout/">{% csrf_token %}<button>退出</button></form>
+      {% endif %}
+    </nav>
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>

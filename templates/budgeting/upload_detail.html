@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>上传详情</h1>
+<p>项目：{{ upload.project }}</p>
+<p>状态：{{ upload.get_status_display }}</p>
+<p>文件指纹：<code>{{ upload.sha256 }}</code></p>
+{% if upload.status == "VALIDATED" and user.role == "PROJECT" %}
+  <form method="post" action="{% url 'project_submit_upload' upload.id %}">{% csrf_token %}<button type="submit">提交管理端</button></form>
+{% endif %}
+{% if upload.status == "SUBMITTED" and user.role == "ADMIN" %}
+  <form method="post" action="{% url 'management_approve_upload' upload.id %}">{% csrf_token %}<button type="submit">批准并切换正式版本</button></form>
+{% endif %}
+<h2>校验问题</h2>
+<table>
+  <tr><th>级别</th><th>编码</th><th>位置</th><th>说明</th></tr>
+  {% for issue in issues %}
+    <tr><td>{{ issue.severity }}</td><td>{{ issue.code }}</td><td>{{ issue.location }}</td><td>{{ issue.message }}</td></tr>
+  {% empty %}
+    <tr><td colspan="4">无问题</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,4 @@
+{% extends "budgeting/base.html" %}
+{% block title %}无权访问 · 酒店预算与损益{% endblock %}
+{% block breadcrumb %}<span>访问受限</span>{% endblock %}
+{% block content %}<section class="error-page"><p class="error-page__code">403</p><p class="eyebrow">ACCESS RESTRICTED</p><h1>当前账号无权访问此页面</h1><p>请确认你登录的是正确的项目账号。如需访问管理端，请联系预算管理员。</p><div class="button-row"><a class="button button--primary" href="{{ project_dashboard_url|default:'#' }}">返回项目首页</a>{% if logout_url %}<a class="button button--ghost" href="{{ logout_url }}">切换账号</a>{% endif %}</div></section>{% endblock %}

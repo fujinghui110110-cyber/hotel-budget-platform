@@ -1,0 +1,42 @@
+{% extends "budgeting/base.html" %}
+{% block title %}统一模板 · 酒店预算与损益{% endblock %}
+{% block breadcrumb %}{% url 'project_dashboard' as project_dashboard_url %}<a href="{{ project_dashboard_url|default:'#' }}">项目首页</a><span aria-hidden="true">/</span><span>统一模板</span>{% endblock %}
+{% block content %}
+{% url 'project_template_download' as template_download_url %}
+{% url 'project_upload_new' as upload_new_url %}
+<section class="page-heading">
+    <p class="eyebrow">PROJECT TEMPLATE</p>
+    <h1>统一预算模板</h1>
+    <p class="page-heading__lead">所有项目使用同一套 Excel 模板。下载最新版本，完成预算后回到本页上传。</p>
+</section>
+<section class="template-hero panel-card">
+    <div class="template-hero__icon" aria-hidden="true">XLS</div>
+    <div class="template-hero__body">
+        <p class="eyebrow">CURRENT VERSION</p>
+        <h2>{{ template.name|default:'酒店年度预算套表.xlsx' }}</h2>
+        <p>{{ template.version|default:'统一模板 · 当前版本' }} · {{ template.updated_at|default:'由管理端维护' }} · {{ template.size|default:'Excel 工作簿' }}</p>
+        <div class="button-row">
+            {% if template_download_url %}<a class="button button--primary" href="{{ template_download_url }}">下载模板 <span aria-hidden="true">↓</span></a>{% endif %}
+            {% if upload_new_url %}<a class="button button--secondary" href="{{ upload_new_url }}">上传已填写模板</a>{% endif %}
+        </div>
+    </div>
+</section>
+<section class="content-grid content-grid--two">
+    <article class="panel-card">
+        <div class="panel-card__heading"><div><p class="eyebrow">INCLUDED SHEETS</p><h2>模板包含内容</h2></div></div>
+        <ul class="check-list">
+            <li><span aria-hidden="true">01</span>经营假设：房量、OCC、ADR 及营业天数。</li>
+            <li><span aria-hidden="true">02</span>部门预算：收入、成本及费用明细。</li>
+            <li><span aria-hidden="true">03</span>管理汇总：四套损益管理表的计算基础。</li>
+        </ul>
+    </article>
+    <article class="panel-card">
+        <div class="panel-card__heading"><div><p class="eyebrow">BEFORE UPLOAD</p><h2>上传前检查</h2></div></div>
+        <ol class="number-list">
+            <li>保留所有工作表名称和公式区域。</li>
+            <li>只在输入区域填写数据，不要覆盖公式。</li>
+            <li>确认项目名称、预算周期和金额单位。</li>
+        </ol>
+    </article>
+</section>
+{% endblock %}

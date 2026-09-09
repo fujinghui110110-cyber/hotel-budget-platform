@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}管理驾驶舱 · 酒店预算与损益管理平台{% endblock %}
+
+{% block breadcrumb %}
+  <span>管理端</span><span aria-hidden="true">/</span><span>管理驾驶舱</span>
+{% endblock %}
+
+{% block content %}
+  {% url 'report_catalog' as report_catalog_url %}
+  {% url 'reference_catalog' as ref_url %}
+  <link rel="stylesheet" href="{% static 'budgeting/cockpit.css' %}">
+
+  <section class="cockpit-heading">
+    <div>
+      <p class="eyebrow">管理控制台</p>
+      <h1>管理驾驶舱</h1>
+      <p class="lede">{% if cycle %}{{ cycle.name }}{% else %}暂无开放预算周期{% endif %}</p>
+    </div>
+    <div class="cockpit-actions">
+      <a class="button button--secondary" href="{{ report_catalog_url }}">全部报表</a>
+      {% if ref_url %}<a class="button button--ghost" href="{{ ref_url }}">真实项目历史原表</a>{% endif %}
+      <a class="button button--ghost" href="{% url 'cockpit_trend' %}?report_code={{ report_code|urlencode }}">趋势分析</a>
+    </div>
+  </section>
+
+  <section class="cockpit-panel cockpit-coverage" aria-label="项目覆盖率">
+    <div>
+      <span class="cockpit-kicker">数据覆盖</span>
+      <strong>{{ coverage.included|default:0 }} / {{ coverage.active|default:0 }}</strong>
+      <span>已纳入 / 活跃项目</span>
+    </div>
+    <div>
+      <span class="cockpit-kicker">当前报表</span>
+      <strong>{{ report_name|default:report_code }}</strong>
+      <span>基于当前批准版本</span>
+    </div>
+    <form class="cockpit-filter" method="get" action="{% url 'cockpit_dashboard' %}">
+      <label for="report_code">报表</label>
+      <select id="report_code" name="report_code" onchange="this.form.submit()">
+        {% for code, name in REPORTS.items %}<option value="{{ code }}"{% if code == report_code %} selected{% endif %}>{{ name }}</option>{% endfor %}
+      </select>
+    </form>
+  </section>
+
+  <section class="cockpit-panel cockpit-tasks" aria-labelledby="management-tasks-title">
+    <div class="cockpit-section-head">
+      <div>
+        <h2 id="management-tasks-title">管理待办</h2>
+        <span class="cockpit-muted">已批准 {{ approved_projects|default:0 }} / 活跃 {{ active_projects|default:0 }} 个项目</span>
+      </div>
+      <span class="cockpit-muted">点击进入对应处理队列</span>
+    </div>
+    <div class="cockpit-task-grid">
+      <a class="cockpit-task-card" href="{% url 'management_projects' %}"><span class="cockpit-task-label">待处理提交</span><strong>{{ management_tasks.submitted_projects|default:0 }}</strong><small>项目上传待批准或打回</small></a>
+      <a class="cockpit-task-card" href="{% url 'management_projects' %}"><span class="cockpit-task-label">待校验项目</span><strong>{{ management_tasks.validation_projects|default:0 }}</strong><small>存在未处理校验问题</small></a>
+      <a class="cockpit-task-card" href="{% url 'cockpit_questions' %}?status=OPEN"><span class="cockpit-task-label">未回复问题</span><strong>{{ management_tasks.unanswered_questions|default:0 }}</strong><small>需要管理端跟进</small></a>
+      <a class="cockpit-task-card" href="{% url 'cockpit_questions' %}?status=ANSWERED"><span class="cockpit-task-label">已回复问题</span><strong>{{ management_tasks.answered_questions|default:0 }}</strong><small>等待关闭或复核</small></a>
+      <a class="cockpit-task-card" href="{% url 'management_adjustments' %}"><span class="cockpit-task-label">开放调整</span><strong>{{ management_tasks.open_adjustments|default:0 }}</strong><small>待处理预算调整</small></a>
+    </div>
+  </section>
+
+  <section class="cockpit-panel panel" aria-labelledby="kpi-title">
+    <div class="cockpit-section-head">
+      <h2 id="kpi-title">核心指标</h2>
+      <span class="cockpit-muted">金额单位：元；比率单位：%</span>
+    </div>
+    <div class="cockpit-kpis">
+      {% for kpi in kpis %}
+        <a class="cockpit-kpi" href="{% url 'cockpit_drilldown' %}?metric={{ kpi.code|urlencode }}&amp;report_code={{ report_code|urlencode }}">
+          <span>{{ kpi.label }}</span>
+          <strong>{{ kpi.display|default:"—" }}</strong>
+          <small>{% if kpi.available %}{{ kpi.included_projects|default:0 }} 个项目{% else %}暂无可用数据{% endif %}</small>
+        </a>
+      {% empty %}
+        <p class="cockpit-empty">当前周期暂无核心指标。</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="cockpit-panel panel" aria-labelledby="project-title">
+    <div class="cockpit-section-head">
+      <h2 id="project-title">项目数据对比</h2>
+      <span class="cockpit-muted">仅展示 current_upload 已批准版本</span>
+    </div>
+    {% if projects %}
+      <div class="cockpit-table-wrap table-card table-scroll">
+        <table class="cockpit-table data-table">
+          <thead>
+            <tr><th scope="col">项目</th>{% for kpi in kpis %}<th scope="col">{{ kpi.label }}</th>{% endfor %}<th scope="col">报表</th></tr>
+          </thead>
+          <tbody>
+            {% for item in projects %}
+              <tr>
+                <th scope="row"><a href="{% url 'cockpit_project' item.project.id %}">{{ item.project.code }} {{ item.project.name }}</a></th>
+                {% for cell in item.cells %}<td>{{ cell }}</td>{% endfor %}
+                <td><a class="text-link" href="{{ report_catalog_url }}?project_id={{ item.project.id }}">全部分表</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="cockpit-empty">暂无已批准项目数据。</p>
+    {% endif %}
+  </section>
+
+  {{ trend_data|json_script:"cockpit-dashboard-data" }}
+  <script src="{% static 'budgeting/cockpit.js' %}" defer></script>
+{% endblock %}

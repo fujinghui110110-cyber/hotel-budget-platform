@@ -1,0 +1,28 @@
+{% extends "budgeting/base.html" %}
+{% block title %}项目调整 · 酒店预算与损益{% endblock %}
+{% block breadcrumb %}{% url 'project_dashboard' as project_dashboard_url %}<a href="{{ project_dashboard_url|default:'#' }}">项目首页</a><span aria-hidden="true">/</span><span>项目调整</span>{% endblock %}
+{% block content %}
+{% url 'project_dashboard' as project_dashboard_url %}
+<section class="page-heading page-heading--split">
+    <div><p class="eyebrow">PROJECT ADJUSTMENTS</p><h1>项目级调整</h1><p class="page-heading__lead">集中查看管理端返回的调整事项，确认后在原 Excel 模板中修正并重新上传。</p></div>
+    <div class="page-heading__actions"><span class="status-badge status-badge--warning status-badge--large">{{ open_adjustments|length|default:'0' }} 项待处理</span></div>
+</section>
+<section class="section-block" aria-labelledby="adjustments-heading">
+    <div class="section-heading"><div><p class="eyebrow">ACTION QUEUE</p><h2 id="adjustments-heading">调整清单</h2></div><span class="section-heading__hint">调整不会直接改写原始文件</span></div>
+    <div class="table-card"><div class="table-scroll"><table class="data-table">
+        <caption class="sr-only">项目级预算调整事项</caption>
+        <thead><tr><th scope="col">事项</th><th scope="col">涉及期间</th><th scope="col" class="align-right">差异金额</th><th scope="col">来源</th><th scope="col">状态</th><th scope="col">最后更新</th></tr></thead>
+        <tbody>
+        {% for adjustment in open_adjustments %}
+            <tr><td><strong>{{ adjustment.title|default:adjustment.name|default:'项目级调整事项' }}</strong><small class="table-subtext">{{ adjustment.description|default:adjustment.reason|default:'请根据调整说明核对模板。' }}</small></td><td>{{ adjustment.period|default:'—' }}</td><td class="align-right amount amount--negative">{{ adjustment.amount|default:adjustment.discrepancy|default:'—' }}</td><td>{{ adjustment.source|default:'管理汇总' }}</td><td><span class="status-badge status-badge--warning">{{ adjustment.status_label|default:'待处理' }}</span></td><td>{{ adjustment.updated_at|default:'—' }}</td></tr>
+        {% empty %}
+            <tr><td colspan="6"><div class="empty-state empty-state--success"><span class="empty-state__icon" aria-hidden="true">✓</span><strong>没有待处理调整</strong><p>当前项目已与管理汇总保持一致。</p></div></td></tr>
+        {% endfor %}
+        </tbody>
+    </table></div></div>
+</section>
+<section class="content-grid content-grid--two">
+    <article class="panel-card"><div class="panel-card__heading"><div><p class="eyebrow">HOW TO RESOLVE</p><h2>处理方式</h2></div></div><ol class="number-list"><li>打开对应上传版本的原始 Excel 文件。</li><li>按事项中的期间、科目和金额核对。</li><li>保存为新版本后重新上传，系统会重新检查。</li></ol></article>
+    <article class="panel-card panel-card--accent"><div class="panel-card__heading"><div><p class="eyebrow">ZERO DIFFERENCE</p><h2>零尾差目标</h2></div><span class="panel-card__mark" aria-hidden="true">∑</span></div><p class="prose">项目调整以分为最小精度记录，系统会在汇总时进行精确分配，避免四舍五入造成的尾差。</p></article>
+</section>
+{% endblock %}

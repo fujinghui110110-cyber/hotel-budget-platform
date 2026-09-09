@@ -1,0 +1,19 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="登录酒店预算与损益管理平台">
+    <title>登录 · 酒店预算与损益</title>
+    <link rel="stylesheet" href="{% static 'budgeting/budgeting.css' %}">
+</head>
+<body class="auth-body">
+<a class="skip-link" href="#main-content">跳到登录表单</a>
+<main id="main-content" class="auth-layout">
+    <section class="auth-intro" aria-labelledby="auth-title"><div class="brand-mark brand-mark--light"><span class="brand-mark__icon" aria-hidden="true">数</span><span><strong>酒店预算与损益</strong><small>预算数字化管理平台</small></span></div><div class="auth-intro__copy"><p class="eyebrow eyebrow--light">BUDGET CONTROL CENTER</p><h1 id="auth-title">把每一笔预算，<br><em>落到可核对的结果。</em></h1><p>统一模板上传、自动公式检查、四表汇总和项目级调整，在一个工作区完成年度预算管理。</p></div><div class="auth-intro__facts" aria-label="平台能力"><span><strong>01</strong>统一模板</span><span><strong>02</strong>自动校验</span><span><strong>03</strong>零尾差</span></div></section>
+    <section class="auth-panel" aria-labelledby="login-heading"><div class="auth-panel__inner"><p class="eyebrow">项目端登录</p><h2 id="login-heading">欢迎回来</h2><p class="auth-panel__lead">使用项目账号登录预算工作区</p>{% if form.non_field_errors %}<div class="form-error" role="alert">{{ form.non_field_errors }}</div>{% endif %}{% if next %}<p class="notice notice--info">登录后将返回你刚才访问的页面。</p>{% endif %}<form method="post" action="{{ request.path|default:'/login/' }}" class="stack-form" novalidate>{% csrf_token %}<div class="field-group"><label for="{{ form.username.id_for_label|default:'id_username' }}">项目账号</label><input id="{{ form.username.id_for_label|default:'id_username' }}" name="username" type="text" autocomplete="username" required autofocus value="{{ form.username.value|default:'' }}" placeholder="请输入项目账号">{% if form.username.errors %}<p class="field-error" role="alert">{{ form.username.errors|striptags }}</p>{% endif %}</div><div class="field-group"><label for="{{ form.password.id_for_label|default:'id_password' }}">密码</label><div class="password-field"><input id="{{ form.password.id_for_label|default:'id_password' }}" name="password" type="password" autocomplete="current-password" required placeholder="请输入密码"><button type="button" class="password-field__toggle" data-password-toggle="{{ form.password.id_for_label|default:'id_password' }}" aria-label="显示密码">显示</button></div>{% if form.password.errors %}<p class="field-error" role="alert">{{ form.password.errors|striptags }}</p>{% endif %}</div>{% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}<button class="button button--primary button--wide" type="submit">进入预算工作区 <span aria-hidden="true">→</span></button></form><p class="auth-panel__note"><span aria-hidden="true">⌁</span> 一个项目使用一个账号，账号由预算管理员统一维护。</p></div><p class="auth-panel__footer">内部系统 · 请勿将账号密码提供给他人</p></section>
+</main>
+<script src="{% static 'budgeting/budgeting.js' %}" defer></script>
+</body>
+</html>

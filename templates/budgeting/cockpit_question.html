@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{% if question %}问题详情{% else %}新建问题{% endif %} · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}<span>问题跟进</span><span aria-hidden="true">/</span><span>{% if question %}问题详情{% else %}新建问题{% endif %}</span>{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'budgeting/cockpit.css' %}">
+<section class="cockpit-heading"><div><p class="eyebrow">Question lane</p><h1>{% if question %}问题详情{% else %}新建问题{% endif %}</h1></div><a class="button button--ghost" href="{% url 'cockpit_questions' %}">返回问题列表</a></section>
+{% if question %}
+<section class="cockpit-panel panel">
+  <div class="question-meta"><span class="badge">{{ question.get_status_display }}</span><span>创建于 {{ question.created_at|date:"Y-m-d H:i" }}</span></div>
+  <dl class="question-snapshot"><dt>项目</dt><dd>{{ context.project_label }}</dd><dt>提问时版本</dt><dd>{{ context.version_label }}<span class="cockpit-muted">（{{ context.version_id }}）</span></dd><dt>报表</dt><dd>{{ context.report_label }}</dd><dt>指标</dt><dd>{{ context.metric_label }}</dd><dt>期间</dt><dd>{{ context.period_label }}</dd><dt>来源</dt><dd>{{ context.source_label }} · {{ context.source_formula }}</dd><dt>快照值</dt><dd>{{ context.value_display }}</dd></dl>
+  <p class="question-body">{{ question.body }}</p>
+  {% if is_admin %}<div class="cockpit-actions">{% if question.status != "CLOSED" %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="close"><button class="button button--ghost" type="submit" {% if frozen %}disabled{% endif %}>关闭问题</button></form>{% else %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="reopen"><button class="button button--ghost" type="submit" {% if frozen %}disabled{% endif %}>重新打开</button></form>{% endif %}</div>{% endif %}
+</section>
+<section class="cockpit-panel panel">
+  <h2>回复</h2>
+  {% for reply in question.replies.all %}<article class="question-reply"><strong>{{ reply.actor.username }}</strong><time>{{ reply.created_at|date:"Y-m-d H:i" }}</time><p>{{ reply.body }}</p></article>{% empty %}<p class="cockpit-empty">暂无回复。</p>{% endfor %}
+  {% if question.status != "CLOSED" %}<form method="post" class="question-form form-stack">{% csrf_token %}<input type="hidden" name="action" value="reply">{{ reply_form.body.label_tag }}{{ reply_form.body }}{% for error in reply_form.body.errors %}<p class="form-error">{{ error }}</p>{% endfor %}<button class="button button--secondary" type="submit" {% if frozen %}disabled{% endif %}>提交回复</button></form>{% endif %}
+</section>
+{% else %}
+<section class="cockpit-panel panel">
+  {% if context_bound and context %}
+    <div class="question-context"><h2>已选数据</h2><dl class="question-snapshot"><dt>项目</dt><dd>{{ context.project_label }}</dd><dt>当前版本</dt><dd>{{ context.version_label }}</dd><dt>报表</dt><dd>{{ context.report_label }}</dd><dt>指标</dt><dd>{{ context.metric_label }}</dd><dt>期间</dt><dd>{{ context.period_label }}</dd><dt>来源</dt><dd>{{ context.source_label }} · {{ context.source_formula }}</dd><dt>当前值</dt><dd>{{ context.value_display }}</dd></dl></div>
+    <form method="post" class="question-form form-stack">{% csrf_token %}{% if cycle %}<input type="hidden" name="cycle" value="{{ cycle.id }}">{% endif %}<input type="hidden" name="value_id" value="{{ form.value_id.value|default:'' }}"><input type="hidden" name="upload_id" value="{{ form.upload_id.value|default:'' }}"><input type="hidden" name="report_code" value="{{ form.report_code.value|default:'' }}"><input type="hidden" name="row_code" value="{{ form.row_code.value|default:'' }}"><input type="hidden" name="period" value="{{ form.period.value|default:'' }}">{{ form.body.label_tag }}{{ form.body }}{% for error in form.body.errors %}<p class="form-error">{{ error }}</p>{% endfor %}{% for error in form.value_id.errors %}<p class="form-error">{{ error }}</p>{% endfor %}<button class="button button--secondary" type="submit">创建问题</button></form>
+  {% else %}
+    <p class="cockpit-muted">请选择项目、报表、指标和期间；系统会自动绑定当前批准版本的真实数据。</p>
+    <form method="post" class="question-form form-stack">{% csrf_token %}{% if cycle %}<input type="hidden" name="cycle" value="{{ cycle.id }}">{% endif %}{{ context_form.non_field_errors }}{% for field in context_form %}<div class="question-field">{{ field.label_tag }}{{ field }}{% for error in field.errors %}<p class="form-error">{{ error }}</p>{% endfor %}</div>{% endfor %}<button class="button button--secondary" type="submit">创建问题</button></form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

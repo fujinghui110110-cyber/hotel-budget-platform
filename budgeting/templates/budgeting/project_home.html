@@ -1,0 +1,10 @@
+{% extends "budgeting/base.html" %}
+{% block content %}
+<h1>项目端工作台</h1>
+<div class="grid">
+  <section class="panel"><h2>当前周期</h2><p>{{ cycle.name }} / {{ cycle.status }}</p><a class="button" href="/project/template/">下载标准模板</a></section>
+  <section class="panel"><h2>下一步</h2><a class="button primary" href="/project/uploads/new">上传完整预算套表</a></section>
+  <section class="panel"><h2>待处理调整</h2><p>{{ lines|length }} 项</p></section>
+</div>
+<section class="panel"><h2>最近上传</h2><table><tr><th>时间</th><th>文件</th><th>状态</th><th></th></tr>{% for u in uploads %}<tr><td>{{ u.created_at }}</td><td>{{ u.original_name }}</td><td>{{ u.status }}</td><td><a href="/project/uploads/{{ u.id }}/">查看</a></td></tr>{% endfor %}</table></section>
+{% endblock %}

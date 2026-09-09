@@ -1,0 +1,99 @@
+name: hotel-budget
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    env_file:
+      - path: ${BUDGET_ENV_FILE:-deploy/.env.production}
+        required: false
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings
+      RUN_MIGRATIONS: "1"
+      DATABASE_PATH: /var/lib/budget/db.sqlite3
+      BUDGET_STORAGE_ROOT: /var/lib/budget/storage
+      SOFFICE_BIN: /usr/bin/soffice
+    command:
+      - gunicorn
+      - config.wsgi:application
+      - --bind
+      - 0.0.0.0:8000
+      - --workers
+      - "1"
+      - --threads
+      - "1"
+      - --timeout
+      - "300"
+    volumes:
+      - app_data:/var/lib/budget
+      - static_data:/app/staticfiles
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${PORT:-8000}:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4)
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    env_file:
+      - path: ${BUDGET_ENV_FILE:-deploy/.env.production}
+        required: false
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings
+      RUN_MIGRATIONS: "0"
+      DATABASE_PATH: /var/lib/budget/db.sqlite3
+      BUDGET_STORAGE_ROOT: /var/lib/budget/storage
+      SOFFICE_BIN: /usr/bin/soffice
+      BUDGET_PROCESS_UPLOAD_INLINE: "0"
+    command:
+      - python
+      - manage.py
+      - budget_worker
+      - --sleep
+      - "2"
+      - --lease-seconds
+      - "240"
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - app_data:/var/lib/budget
+
+  caddy:
+    image: caddy:2.9-alpine
+    profiles: [https]
+    restart: unless-stopped
+    env_file:
+      - path: ${BUDGET_ENV_FILE:-deploy/.env.production}
+        required: false
+    depends_on:
+      web:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - static_data:/srv/static:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  app_data:
+  static_data:
+  caddy_data:
+  caddy_config:

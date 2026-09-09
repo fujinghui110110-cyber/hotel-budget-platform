@@ -1,0 +1,11 @@
+{% extends "budgeting/base.html" %}
+{% block content %}
+<section class="panel narrow">
+  <h1>上传预算套表</h1>
+  <p>当前周期：{{ cycle.name }}</p>
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    {{ form.as_p }}
+    <button class="primary">上传并排队校验</button>
+  </form>
+</section>
+{% endblock %}

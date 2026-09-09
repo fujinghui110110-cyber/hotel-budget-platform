@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}预算周期 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}<span>管理端</span><span aria-hidden="true">/</span><span>预算周期</span>{% endblock %}
+{% block content %}
+{% url 'management_projects' as management_projects_url %}
+{% url 'management_freeze' as management_freeze_url %}
+{% url 'management_audit' as management_audit_url %}
+{% url 'management_dashboard' as management_dashboard_url %}
+<section class="page-heading page-heading--split">
+  <div>
+    <p class="eyebrow">管理控制台</p>
+    <h1>预算周期</h1>
+    <p class="lede">年度预算按版本周期推进：开放下一修订版即开启新版预算，上一版已批准的项目数据会自动作为基线带入。当前开放周期：{% if active_cycle %}{{ active_cycle.name }} R{{ active_cycle.revision_no }}（{{ active_cycle.get_status_display }}）{% else %}暂无开放周期{% endif %}。</p>
+  </div>
+  <div class="actions actions--end">
+    <a class="button button--primary" href="{{ management_projects_url }}">项目进度与审批</a>
+    <a class="button button--ghost" href="{{ management_dashboard_url }}">管理驾驶台</a>
+    <a class="button button--ghost" href="{{ management_freeze_url }}">冻结检查</a>
+  </div>
+</section>
+
+{% if cycles %}
+<section class="panel" aria-labelledby="cycle-list-title">
+  <div class="section-heading">
+    <div><p class="eyebrow">周期清单</p><h2 id="cycle-list-title">周期清单</h2></div>
+    <span class="badge">{{ cycles|length }} 个周期</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <caption class="sr-only">预算周期清单</caption>
+      <thead>
+        <tr>
+          <th scope="col">周期</th>
+          <th scope="col">年度</th>
+          <th scope="col">修订</th>
+          <th scope="col">状态</th>
+          <th scope="col">冻结时间</th>
+          <th scope="col">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cycle in cycles %}
+        <tr>
+          <th scope="row">{{ cycle.name }}{% if active_cycle and cycle.id == active_cycle.id %} <span class="badge">当前开放</span>{% endif %}</th>
+          <td>{{ cycle.budget_year }}</td>
+          <td class="mono">R{{ cycle.revision_no }}</td>
+          <td><span class="status status--{{ cycle.status|lower|default:'unknown' }}">{{ cycle.get_status_display }}</span></td>
+            <td class="mono">{{ cycle.frozen_at|default:'—' }}<br><a href="{% url 'management_p1_threshold' cycle.id %}">波动提醒阈值</a></td>
+          <td>
+            {% if cycle.id in next_openable_ids %}
+            <form method="post" action="{% url 'management_cycle_reopen' cycle.id %}">{% csrf_token %}
+              <button class="button button--ghost" type="submit" data-confirm="开放 R{{ cycle.revision_no|add:1 }} 会把本周期已批准数据复制为新版基线，确认开放？">开放下一修订版（R{{ cycle.revision_no|add:1 }}）</button>
+            </form>
+            {% else %}<span class="muted">历史版本 · 已被后续修订取代</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="table-footnote"><span aria-hidden="true">i</span>「开放下一修订版」会把本周期已批准的项目数据复制为新版基线，随后由各项目上传新版、经管理端批准后汇总。</p>
+</section>
+{% else %}
+<p class="empty-state">暂无预算周期，请联系管理员创建首个年度预算周期。</p>
+{% endif %}
+
+<section class="panel" aria-labelledby="report-entry-title">
+  <div class="section-heading">
+    <div><p class="eyebrow">四张报表</p><h2 id="report-entry-title">四张管理报表</h2></div>
+  </div>
+  <div class="report-link-grid">
+    {% url 'management_report' 'PL_TOTAL_WINE' as report_total_wine_url %}
+    {% url 'management_report' 'PL_TOTAL_NOWINE' as report_total_nowine_url %}
+    {% url 'management_report' 'PL_ZZ_WINE' as report_zz_wine_url %}
+    {% url 'management_report' 'PL_ZZ_NOWINE' as report_zz_nowine_url %}
+    <a class="report-link" href="{{ report_total_wine_url }}"><strong>酒店损益总表（含名酒）</strong><span>全酒店口径 · 含名酒</span></a>
+    <a class="report-link" href="{{ report_total_nowine_url }}"><strong>酒店损益总表（不含名酒）</strong><span>全酒店口径 · 不含名酒</span></a>
+    <a class="report-link" href="{{ report_zz_wine_url }}"><strong>损益表（含名酒）（拆中智）</strong><span>拆中智口径 · 含名酒</span></a>
+    <a class="report-link" href="{{ report_zz_nowine_url }}"><strong>损益表（不含名酒）（拆中智）</strong><span>拆中智口径 · 不含名酒</span></a>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,117 @@
+{% extends "budgeting/base.html" %}
+{% block title %}项目首页 · 酒店预算与损益{% endblock %}
+{% block breadcrumb %}<span>项目首页</span>{% endblock %}
+{% block content %}
+{% url 'project_template_download' as template_download_url %}
+{% url 'project_upload_new' as upload_new_url %}
+{% url 'project_adjustments' as adjustments_url %}
+{% url 'project_history' as history_url %}
+{% with cycle_name=project_cycle.name|default:active_cycle.name|default:'年度预算项目' %}
+<section class="page-heading page-heading--split">
+    <div>
+        <p class="eyebrow">项目工作台 / {{ project_cycle.period|default:active_cycle.period|default:'预算周期' }}</p>
+        <h1>{{ cycle_name }}</h1>
+        <p class="page-heading__lead">按统一模板完成预算上传，系统会自动检查公式并返回可处理的问题。</p>
+    </div>
+    <div class="page-heading__actions">
+        {% if upload_new_url %}<a class="button button--primary" href="{{ upload_new_url }}">上传预算文件 <span aria-hidden="true">↑</span></a>{% endif %}
+        {% if template_download_url %}<a class="button button--secondary" href="{{ template_download_url }}">下载统一模板</a>{% endif %}
+    </div>
+</section>
+
+<section class="status-strip" aria-label="项目状态">
+    <div class="status-strip__item">
+        <span class="status-strip__label">当前周期</span>
+        <strong>{{ project_cycle.period|default:active_cycle.period|default:'2026 年预算' }}</strong>
+        <span class="status-dot status-dot--green">进行中</span>
+    </div>
+    <div class="status-strip__item">
+        <span class="status-strip__label">最后上传</span>
+        <strong>{{ project_cycle.last_upload_at|default:'尚未上传' }}</strong>
+        <span class="muted">版本自动留痕</span>
+    </div>
+    <div class="status-strip__item">
+        <span class="status-strip__label">待处理事项</span>
+        <strong>{{ open_adjustments|length|default:'0' }}</strong>
+        <span class="muted">项目级调整</span>
+    </div>
+</section>
+
+<section class="section-block" aria-labelledby="steps-heading">
+    <div class="section-heading">
+        <div><p class="eyebrow">PROCESS</p><h2 id="steps-heading">完成预算只需四步</h2></div>
+        <span class="section-heading__hint">系统会保留每个版本及检查结果</span>
+    </div>
+    <ol class="step-grid">
+        {% for step in step_items %}
+            <li class="step-card {% if step.state == 'done' or step.status == 'done' %}is-done{% elif step.state == 'current' or step.status == 'current' %}is-current{% endif %}">
+                <span class="step-card__number">{{ step.number|default:forloop.counter|stringformat:'02d' }}</span>
+                <div class="step-card__body">
+                    <h3>{{ step.title|default:'预算步骤' }}</h3>
+                    <p>{{ step.description|default:'按页面提示完成当前步骤。' }}</p>
+                    {% if step.state == 'done' or step.status == 'done' %}<span class="step-card__status">已完成</span>{% elif step.state == 'current' or step.status == 'current' %}<span class="step-card__status">进行中</span>{% else %}<span class="step-card__status">待开始</span>{% endif %}
+                </div>
+            </li>
+        {% empty %}
+            <li class="step-card is-done"><span class="step-card__number">01</span><div class="step-card__body"><h3>下载统一模板</h3><p>使用项目通用 Excel 模板编制预算。</p><span class="step-card__status">已完成</span></div></li>
+            <li class="step-card is-current"><span class="step-card__number">02</span><div class="step-card__body"><h3>上传预算文件</h3><p>提交本项目预算版本，等待系统检查。</p><span class="step-card__status">进行中</span></div></li>
+            <li class="step-card"><span class="step-card__number">03</span><div class="step-card__body"><h3>处理检查问题</h3><p>根据错误反馈修正文件并重新上传。</p><span class="step-card__status">待开始</span></div></li>
+            <li class="step-card"><span class="step-card__number">04</span><div class="step-card__body"><h3>完成提交</h3><p>提交无误版本，进入管理汇总。</p><span class="step-card__status">待开始</span></div></li>
+        {% endfor %}
+    </ol>
+</section>
+
+<section class="section-block" id="uploads" aria-labelledby="uploads-heading">
+    <div class="section-heading">
+        <div><p class="eyebrow">UPLOADS</p><h2 id="uploads-heading">最近上传</h2></div>
+        {% if history_url %}<a class="text-link" href="{{ history_url }}">查看全部历史 <span aria-hidden="true">→</span></a>{% endif %}
+    </div>
+    <div class="table-card">
+        <div class="table-scroll">
+            <table class="data-table">
+                <caption class="sr-only">项目预算文件上传记录</caption>
+                <thead><tr><th scope="col">文件 / 版本</th><th scope="col">上传时间</th><th scope="col">提交人</th><th scope="col">检查结果</th><th scope="col" class="align-right">操作</th></tr></thead>
+                <tbody>
+                {% for upload in uploads %}
+                    {% url 'project_upload_detail' upload.pk as upload_detail_url %}
+                    <tr>
+                        <td><div class="file-cell"><span class="file-icon" aria-hidden="true">XLS</span><div><strong>{{ upload.file_name|default:upload.filename|default:'预算模板.xlsx' }}</strong><small>{{ upload.version|default:'版本待识别' }}</small></div></div></td>
+                        <td>{{ upload.created_at|default:upload.uploaded_at|default:'—' }}</td>
+                        <td>{{ upload.created_by|default:'项目用户' }}</td>
+                        <td><span class="status-badge status-badge--{{ upload.status|default:'pending'|lower }}">{{ upload.status_label|default:upload.status|default:'待检查' }}</span></td>
+                        <td class="align-right">{% if upload_detail_url %}<a class="text-link" href="{{ upload_detail_url }}">查看详情</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5"><div class="empty-state"><span class="empty-state__icon" aria-hidden="true">↥</span><strong>还没有上传记录</strong><p>下载统一模板并上传第一版预算文件。</p>{% if upload_new_url %}<a class="button button--secondary button--small" href="{{ upload_new_url }}">上传预算文件</a>{% endif %}</div></td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section class="dashboard-grid" id="adjustments">
+    <article class="panel-card panel-card--accent">
+        <div class="panel-card__heading"><div><p class="eyebrow">ACTION REQUIRED</p><h2>待处理调整</h2></div><span class="metric metric--amber">{{ open_adjustments|length|default:'0' }}</span></div>
+        {% if open_adjustments %}
+            <ul class="compact-list">
+            {% for adjustment in open_adjustments|slice:':3' %}
+                <li><span><strong>{{ adjustment.title|default:adjustment.name|default:'项目级调整事项' }}</strong><small>{{ adjustment.description|default:'等待处理' }}</small></span><span class="status-badge status-badge--warning">{{ adjustment.status_label|default:'待处理' }}</span></li>
+            {% endfor %}
+            </ul>
+            {% if adjustments_url %}<a class="text-link" href="{{ adjustments_url }}">进入调整清单 <span aria-hidden="true">→</span></a>{% endif %}
+        {% else %}
+            <div class="empty-inline"><span aria-hidden="true">✓</span><p>当前没有待处理调整。</p></div>
+        {% endif %}
+    </article>
+    <article class="panel-card">
+        <div class="panel-card__heading"><div><p class="eyebrow">CHECK RULES</p><h2>上传前提醒</h2></div><span class="panel-card__mark" aria-hidden="true">i</span></div>
+        <ul class="check-list">
+            <li><span aria-hidden="true">✓</span>请使用平台下载的统一模板，不要改动工作表名称。</li>
+            <li><span aria-hidden="true">✓</span>金额按元填写，OCC 按售出间夜 ÷ 可售间夜计算。</li>
+            <li><span aria-hidden="true">✓</span>上传后先查看检查问题，再提交最终版本。</li>
+        </ul>
+    </article>
+</section>
+{% endwith %}
+{% endblock %}

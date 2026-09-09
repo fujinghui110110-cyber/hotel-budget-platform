@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}全部报表 · 酒店预算与损益管理平台{% endblock %}
+
+{% block breadcrumb %}
+  <span>{% if user.is_admin_role %}管理端{% else %}项目端{% endif %}</span>
+  <span aria-hidden="true">/</span>
+  <span>全部报表</span>
+{% endblock %}
+
+{% block content %}
+  {% url 'reference_catalog' as ref_url %}
+  {% if user.is_admin_role %}
+    {% url 'report_catalog' as catalog_url %}
+  {% url 'planning_overview' as return_url %}
+  {% else %}
+    {% url 'project_report_catalog' as catalog_url %}
+    {% url 'project_dashboard' as return_url %}
+  {% endif %}
+
+  <section class="page-heading page-heading--split">
+    <div>
+      <p class="eyebrow">报表中心</p>
+      <h1>全部报表</h1>
+      <p class="lede">{% if selected_project %}当前查看：{{ selected_project.code }} {{ selected_project.name }}{% else %}当前查看：公司正式汇总{% endif %} · 主表与已登记分表统一入口。</p>
+    </div>
+    <div class="actions actions--end">
+      {% if user.is_admin_role and ref_url %}<a class="button button--secondary" href="{{ ref_url }}">真实项目历史原表</a>{% endif %}
+    <a class="button button--ghost" href="{{ return_url }}">返回预算总览</a>
+    </div>
+  </section>
+
+  {% if user.is_admin_role and projects %}
+    <section class="panel-card" aria-labelledby="report-scope-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">查看口径</p>
+          <h2 id="report-scope-title">公司 / 项目切换</h2>
+        </div>
+        <span class="section-heading__hint">只查看已纳入当前周期的项目数据</span>
+      </div>
+      <form method="get" action="{{ catalog_url }}" class="inline-form">
+        <label class="sr-only" for="report-project">选择报表范围</label>
+        <select id="report-project" name="project_id" onchange="this.form.submit()">
+          <option value="">公司正式汇总</option>
+          {% for project in projects %}
+            <option value="{{ project.id }}"{% if selected_project and selected_project.id == project.id %} selected{% endif %}>{{ project.code }} {{ project.name }}</option>
+          {% endfor %}
+        </select>
+        <noscript><button class="button button--secondary" type="submit">切换</button></noscript>
+      </form>
+    </section>
+  {% endif %}
+
+  <section class="section-block" aria-labelledby="primary-reports-title">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">主表</p>
+        <h2 id="primary-reports-title">四张主表</h2>
+      </div>
+      <span class="section-heading__hint">点击进入完整期间明细</span>
+    </div>
+    <div class="report-link-grid">
+      {% for code, name in REPORTS.items %}
+        {% if user.is_admin_role %}
+          {% url 'management_report' code as report_url %}
+        {% else %}
+          {% url 'project_report' code as report_url %}
+        {% endif %}
+        <a class="report-link" href="{{ report_url }}{% if selected_project %}?project_id={{ selected_project.id }}{% endif %}">
+          <strong>{{ name }}</strong>
+          <span>{{ code }}</span>
+        </a>
+      {% empty %}
+        <p class="empty-state">当前没有登记的主表。</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="section-block" aria-labelledby="sub-reports-title">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">分表</p>
+        <h2 id="sub-reports-title">全部登记分表</h2>
+      </div>
+      <span class="section-heading__hint">按当前报表范围统计行数</span>
+    </div>
+    <div class="report-link-grid">
+      {% for table in sub_tables %}
+        {% if user.is_admin_role %}
+          {% url 'management_report' table.code as report_url %}
+        {% else %}
+          {% url 'project_report' table.code as report_url %}
+        {% endif %}
+        <a class="report-link" href="{{ report_url }}{% if selected_project %}?project_id={{ selected_project.id }}{% endif %}">
+          <strong>{{ table.name|default:table.code }}</strong>
+          <span>{{ table.rows|default:0 }} 行</span>
+        </a>
+      {% empty %}
+        <p class="empty-state">当前模板暂无已登记分表。</p>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

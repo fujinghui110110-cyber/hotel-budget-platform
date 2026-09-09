@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}预算总览 · 酒店预算系统{% endblock %}
+{% block breadcrumb %}<span>预算总览</span>{% endblock %}
+{% block content %}
+<section class="planning-heading">
+  <div><h1>预算总览</h1><p>统筹编制 {{ cycle.budget_year|default:"下一年度" }} 年预算，统一核对历史实际、当期预测与预算目标。</p></div>
+  {% if demo_mode %}<span class="planning-note">演示数据</span>{% endif %}
+</section>
+
+<section class="planning-filter" aria-label="预算口径筛选">
+  <form method="get" action="/management/planning/">
+    <label>项目<select name="project_id" onchange="this.form.submit()"><option value="">公司汇总</option>{% for project in projects %}<option value="{{ project.pk }}"{% if selected_project_id == project.pk|stringformat:'s' %} selected{% endif %}>{{ project.code }} {{ project.name }}</option>{% endfor %}</select></label>
+    <label>预算周期<select name="cycle" onchange="this.form.submit()">{% for item in cycles %}<option value="{{ item.pk }}"{% if cycle and item.pk == cycle.pk %} selected{% endif %}>{{ item.name }} · {{ item.budget_year }}预算</option>{% endfor %}</select></label>
+    <label>指标<select name="metric" onchange="this.form.submit()">{% for item in metric_choices %}<option value="{{ item.code }}"{% if selected_metric == item.code %} selected{% endif %}>{{ item.label }}</option>{% endfor %}</select></label>
+    <label>报表<select name="report_code" onchange="this.form.submit()">{% for item in report_choices %}<option value="{{ item.code }}"{% if report_code == item.code %} selected{% endif %}>{{ item.label }}</option>{% endfor %}</select></label>
+    <noscript><button class="button button--primary" type="submit">应用筛选</button></noscript>
+  </form>
+  <div class="planning-year-tabs" aria-label="年度视图">{% for item in comparison_years %}<span class="{% if item.kind == 'budget' or item.kind == 'BUDGET' %}is-budget{% endif %}">{{ item.label }}</span>{% endfor %}</div>
+</section>
+
+<section class="planning-kpis" aria-label="预算关键指标">
+  {% for row in planning_rows|slice:":4" %}
+  <article><span>{{ row.label }}</span><strong>{% with cell=row.cells|last %}{{ cell.display|default:"—" }}{% endwith %}</strong><small>对预测 <b>{{ row.change_display|default:row.delta_display|default:"—" }}</b></small></article>
+  {% empty %}<article class="planning-empty"><span>当前口径暂无预算数据</span><strong>—</strong><small>请先纳入已批准项目版本</small></article>{% endfor %}
+</section>
+
+<section class="panel planning-chart-panel" aria-labelledby="planning-trend-title">
+  <div class="section-heading"><div><h2 id="planning-trend-title">月度预算趋势</h2><p>预测与预算的同口径月度走势</p></div><span class="planning-unit">单位：{% if trend_payload.unit_label == 'wan' %}万元{% else %}{{ trend_payload.unit_label|default:"万元" }}{% endif %}</span></div>
+  <div id="cockpit-trend-chart" class="cockpit-chart" role="img" aria-label="月度预测与预算趋势图"></div>
+</section>
+
+<section class="panel planning-table-panel" aria-labelledby="planning-table-title">
+  <div class="section-heading"><div><h2 id="planning-table-title">历史与预算对比</h2><p>预算年 T 对照 T-3、T-2 实际及 T-1 预测</p></div><span class="planning-coverage">覆盖 {{ coverage.included|default:0 }} / {{ coverage.active|default:0 }} 个项目</span></div>
+  <div class="table-scroll"><table class="planning-table"><caption class="sr-only">四年预算对照表</caption><thead><tr><th>指标</th>{% for item in comparison_years %}<th class="num {% if item.kind == 'budget' or item.kind == 'BUDGET' %}is-budget{% endif %}">{{ item.label }}</th>{% endfor %}<th class="num">较预测变化额</th><th class="num">较预测变化率</th></tr></thead><tbody>{% for row in planning_rows %}<tr><th scope="row"><strong>{{ row.label }}</strong><small>{% if row.unit == 'wan' %}万元{% else %}{{ row.unit }}{% endif %}</small></th>{% for cell in row.cells %}<td class="num {% if cell.kind == 'budget' or cell.kind == 'BUDGET' %}is-budget{% endif %}">{{ cell.display|default:"—" }}</td>{% endfor %}<td class="num delta">{{ row.delta_display|default:"—" }}</td><td class="num delta">{{ row.change_display|default:"—" }}</td></tr>{% empty %}<tr><td colspan="7" class="empty-state">当前口径暂无可比较数据。</td></tr>{% endfor %}</tbody></table></div>
+</section>
+{{ trend_payload|json_script:"cockpit-trend-data" }}
+{% endblock %}
+{% block extra_scripts %}<script src="{% static 'vendor/echarts.min.js' %}" defer></script><script src="{% static 'budgeting/cockpit.js' %}" defer></script>{% endblock %}

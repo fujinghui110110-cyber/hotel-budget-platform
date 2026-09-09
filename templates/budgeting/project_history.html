@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}上传历史 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}
+  {% url 'project_dashboard' as project_dashboard_url %}
+  {% if project_dashboard_url %}<a href="{{ project_dashboard_url }}">项目工作台</a><span aria-hidden="true">/</span>{% endif %}
+  <span>上传历史</span>
+{% endblock %}
+{% block content %}
+  {% url 'project_dashboard' as project_dashboard_url %}
+  {% url 'project_upload_new' as upload_new_url %}
+  <section class="page-heading page-heading--split">
+    <div><p class="eyebrow">版本记录</p><h1>上传历史</h1><p class="lede">本项目的每一次上传、检查和提交都会保留版本记录，便于回溯。</p></div>
+    {% if upload_new_url %}<a class="button button--primary" href="{{ upload_new_url }}">新建上传</a>{% endif %}
+  </section>
+  <section class="panel" aria-labelledby="history-title">
+    <div class="section-heading"><div><p class="eyebrow">留痕记录</p><h2 id="history-title">全部版本</h2></div><span class="badge">{{ uploads|length|default:'0' }} 个版本</span></div>
+    <div class="table-scroll">
+      <table>
+        <caption class="sr-only">项目上传历史版本</caption>
+        <thead><tr><th scope="col">时间</th><th scope="col">文件</th><th scope="col">状态</th><th scope="col">文件指纹</th><th scope="col">操作</th></tr></thead>
+        <tbody>
+          {% for upload in uploads %}
+            {% url 'project_upload_detail' upload.pk as upload_detail_url %}
+            <tr>
+              <td>{{ upload.created_at|default:'—' }}</td>
+              <td>{{ upload.original_name|default:'预算套表' }}</td>
+              <td><span class="status status--{{ upload.status|lower|default:'unknown' }}">{{ upload.get_status_display|default:'待处理' }}</span></td>
+              <td class="mono">{{ upload.sha256|default:'—' }}</td>
+              <td>{% if upload_detail_url %}<a class="text-link" href="{{ upload_detail_url }}">查看详情</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="empty-state">暂无历史版本。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <section class="panel panel--muted" aria-labelledby="history-rule-title">
+    <h2 id="history-rule-title">版本留痕规则</h2>
+    <ul class="check-list">
+      <li>上传即生成版本，系统记录文件哈希、上传人和时间。</li>
+      <li>检查结果绑定到对应版本，错误与提醒不会覆盖旧记录。</li>
+      <li>提交后进入管理汇总，管理端只使用已提交且通过检查的版本。</li>
+    </ul>
+  </section>
+{% endblock %}

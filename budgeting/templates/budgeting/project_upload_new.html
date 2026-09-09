@@ -1,0 +1,41 @@
+{% extends "budgeting/base.html" %}
+{% block title %}上传预算文件 · 酒店预算与损益{% endblock %}
+{% block breadcrumb %}{% url 'project_dashboard' as project_dashboard_url %}<a href="{{ project_dashboard_url|default:'#' }}">项目首页</a><span aria-hidden="true">/</span><span>上传预算文件</span>{% endblock %}
+{% block content %}
+{% url 'project_dashboard' as dashboard_url %}
+{% url 'project_upload_new' as upload_new_url %}
+<section class="page-heading">
+    <p class="eyebrow">UPLOAD WORKBOOK</p>
+    <h1>上传预算文件</h1>
+    <p class="page-heading__lead">提交后系统会先进行模板、公式和勾稽检查；检查期间可以离开页面。</p>
+</section>
+<section class="upload-layout">
+    <form class="upload-card" method="post" enctype="multipart/form-data" action="{{ upload_new_url|default:request.path }}" data-upload-form>
+        {% csrf_token %}
+        <div class="dropzone" data-dropzone>
+            <input id="budget-file" type="file" name="file" accept=".xlsx,.xlsm,.xls" required data-file-input>
+            <label for="budget-file" class="dropzone__label">
+                <span class="dropzone__icon" aria-hidden="true">↑</span>
+                <strong>拖拽 Excel 文件到这里</strong>
+                <span>或点击选择文件 · 支持 .xlsx / .xlsm / .xls</span>
+                <span class="dropzone__filename" data-file-name>尚未选择文件</span>
+            </label>
+        </div>
+        <div class="field-group">
+            <label for="upload-note">上传说明 <span class="muted">（可选）</span></label>
+            <textarea id="upload-note" name="note" rows="3" placeholder="例如：2026 年预算初稿、已按财务会审意见调整"></textarea>
+        </div>
+        <div class="button-row button-row--end"><a class="button button--ghost" href="{{ dashboard_url|default:'#' }}">取消</a><button class="button button--primary" type="submit" data-busy-text="正在提交…">开始检查 <span aria-hidden="true">→</span></button></div>
+    </form>
+    <aside class="side-note" aria-labelledby="upload-note-heading">
+        <p class="eyebrow">CHECKLIST</p>
+        <h2 id="upload-note-heading">上传后会检查什么？</h2>
+        <ul class="check-list">
+            <li><span aria-hidden="true">✓</span>文件格式与统一模板版本</li>
+            <li><span aria-hidden="true">✓</span>公式完整性与错误值</li>
+            <li><span aria-hidden="true">✓</span>跨表合计与零尾差勾稽</li>
+        </ul>
+        <p class="notice notice--info">检查结果仅针对本次上传版本，不会修改你的原始文件。</p>
+    </aside>
+</section>
+{% endblock %}

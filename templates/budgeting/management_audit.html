@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% load budget_tags %}
+{% block title %}审计记录 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}<span>管理端</span><span aria-hidden="true">/</span><span>审计记录</span>{% endblock %}
+{% block content %}
+  <section class="page-heading page-heading--split">
+    <div>
+      <p class="eyebrow">留痕记录</p>
+      <h1>审计记录</h1>
+      <p class="lede">上传、提交、复核、调整和冻结等关键动作按时间留痕，不可篡改。</p>
+    </div>
+    <div class="actions actions--end">
+      <a class="button button--ghost" href="{% url 'management_dashboard' %}">返回驾驶台</a>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="audit-list-title">
+    <div class="section-heading">
+      <div><p class="eyebrow">事件清单</p><h2 id="audit-list-title">全部事件</h2></div>
+      <span class="badge">{{ events|length }} 条记录</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <caption class="sr-only">系统审计事件</caption>
+        <thead>
+          <tr><th scope="col">时间</th><th scope="col">账号</th><th scope="col">动作</th><th scope="col">项目</th><th scope="col">周期</th><th scope="col">备注</th></tr>
+        </thead>
+        <tbody>
+          {% for event in events %}
+            <tr>
+              <td class="mono">{{ event.created_at|date:'Y-m-d H:i' }}</td>
+              <td>{{ event.actor.username|default:'系统' }}</td>
+              <td><span class="badge">{{ event.action|audit_action }}</span></td>
+              <td>{{ event.project.code|default:'—' }}</td>
+              <td>{{ event.cycle.name|default:'—' }}</td>
+              <td>{{ event.payload.reason|default:'—' }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" class="empty-state">暂无审计记录。关键业务动作会在此自动留痕。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

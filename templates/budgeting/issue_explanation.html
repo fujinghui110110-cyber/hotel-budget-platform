@@ -1,0 +1,104 @@
+{% extends "budgeting/base.html" %}
+
+{% block title %}{% if threshold_form %}P1 阈值 · {% else %}P1 问题说明 · {% endif %}酒店预算与损益{% endblock %}
+
+{% block content %}
+<section class="page-heading page-heading--split">
+    <div>
+        <p class="eyebrow">{% if threshold_form %}P1 CONTROL{% else %}P1 VALIDATION ISSUE{% endif %}</p>
+        <h1>{% if threshold_form %}周期 P1 金额阈值{% else %}P1 问题说明{% endif %}</h1>
+        <p class="page-heading__lead">
+            {% if threshold_form %}
+                {{ threshold_cycle.name }} R{{ threshold_cycle.revision_no }}：金额以人民币元输入，系统按整数分保存。
+            {% else %}
+                {{ upload.project.code }} {{ upload.project.name }} · {{ upload.original_name|default:"预算上传版本" }}
+            {% endif %}
+        </p>
+    </div>
+    <div class="page-heading__actions">
+        {% if read_only %}
+            <span class="status-badge status-badge--frozen status-badge--large">已冻结 · 只读</span>
+        {% elif threshold_form %}
+            <span class="status-badge status-badge--warning status-badge--large">管理端设置</span>
+        {% elif is_admin %}
+            <span class="status-badge status-badge--info status-badge--large">管理端确认</span>
+        {% else %}
+            <span class="status-badge status-badge--warning status-badge--large">项目端说明</span>
+        {% endif %}
+    </div>
+</section>
+
+{% if threshold_form %}
+<section class="content-grid content-grid--two">
+    <article class="panel-card panel-card--accent">
+        <div class="panel-card__heading"><div><p class="eyebrow">CURRENT RULE</p><h2>当前阈值</h2></div></div>
+        {% if threshold_cycle.p1_threshold_cents is None %}
+            <p class="metric metric--amber">未启用</p>
+            <p class="prose">留空表示不生成金额变动 P1 问题。</p>
+        {% else %}
+            <p class="metric metric--amber">{{ threshold_cycle.p1_threshold_cents|default:"0" }} 分</p>
+            <p class="prose">保存值为整数分，避免浮点误差。</p>
+        {% endif %}
+    </article>
+    <article class="panel-card">
+        <div class="panel-card__heading"><div><p class="eyebrow">THRESHOLD FORM</p><h2>设置金额阈值</h2></div></div>
+        <form method="post" action="{{ request.path }}" class="stack-form">
+            {% csrf_token %}
+            {{ threshold_form.non_field_errors }}
+            <div class="field-group">
+                <label for="{{ threshold_form.threshold_yuan.id_for_label }}">{{ threshold_form.threshold_yuan.label }}</label>
+                {{ threshold_form.threshold_yuan }}
+                {% if threshold_form.threshold_yuan.help_text %}<small class="muted">{{ threshold_form.threshold_yuan.help_text }}</small>{% endif %}
+                {{ threshold_form.threshold_yuan.errors }}
+            </div>
+            {% if read_only %}
+                <p class="notice notice--info">冻结周期只读，不能修改阈值。</p>
+            {% else %}
+                <button class="button button--primary" type="submit">保存阈值</button>
+            {% endif %}
+        </form>
+    </article>
+</section>
+{% else %}
+<section class="content-grid content-grid--two">
+    <article class="panel-card panel-card--accent">
+        <div class="panel-card__heading"><div><p class="eyebrow">ISSUE DETAIL</p><h2>{{ issue.code }}</h2></div><span class="issue-level issue-level--p1">P1 · 确认</span></div>
+        <dl class="definition-list">
+            <div><dt>问题</dt><dd>{{ issue.message }}</dd></div>
+            <div><dt>位置</dt><dd><code>{{ issue.location|default:"—" }}</code></dd></div>
+            <div><dt>实际值</dt><dd>{{ issue.actual_value|default:"—" }}</dd></div>
+            <div><dt>期望值</dt><dd>{{ issue.expected_value|default:"—" }}</dd></div>
+        </dl>
+    </article>
+    <article class="panel-card">
+        <div class="panel-card__heading"><div><p class="eyebrow">EXPLANATION</p><h2>处理说明</h2></div></div>
+        {% if issue.acknowledgement_note %}
+            <p class="prose">{{ issue.acknowledgement_note }}</p>
+        {% else %}
+            <p class="muted">尚未填写说明。</p>
+        {% endif %}
+        <p>
+            {% if issue.acknowledged %}
+                <span class="status-badge status-badge--passed">已确认</span>
+            {% else %}
+                <span class="status-badge status-badge--warning">待确认</span>
+            {% endif %}
+        </p>
+        {% if frozen %}
+            <p class="notice notice--info">本周期已冻结，问题说明与确认均为只读。</p>
+        {% else %}
+            <form method="post" action="{{ request.path }}" class="stack-form">
+                {% csrf_token %}
+                {{ form.non_field_errors }}
+                <div class="field-group">
+                    <label for="{{ form.acknowledgement_note.id_for_label }}">{% if is_admin %}确认说明（可留空以确认已有说明）{% else %}必填说明{% endif %}</label>
+                    {{ form.acknowledgement_note }}
+                    {{ form.acknowledgement_note.errors }}
+                </div>
+                <button class="button button--primary" type="submit">{% if is_admin %}确认 P1 说明{% else %}提交说明{% endif %}</button>
+            </form>
+        {% endif %}
+    </article>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}冻结检查 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}<span>管理端</span><span aria-hidden="true">/</span><span>冻结检查</span>{% endblock %}
+{% block content %}
+  {% url 'management_freeze' as management_freeze_url %}
+  {% url 'management_cycles' as management_cycles_url %}
+  <section class="page-heading page-heading--split"><div><p class="eyebrow">冻结控制</p><h1>冻结检查</h1><p class="lede">周期：{% if current_cycle %}{{ current_cycle.name|default:'暂无开放周期' }}{% elif cycle %}{{ cycle.name|default:'暂无开放周期' }}{% else %}暂无开放周期{% endif %}。只有全部项目、校验和调整满足条件后才可生成快照。</p></div>{% if management_cycles_url %}<a class="button button--ghost" href="{{ management_cycles_url }}">返回预算周期</a>{% endif %}</section>
+  {% if error %}<div class="message message--error" role="alert">{{ error }}</div>{% endif %}
+  <section class="panel" aria-labelledby="freeze-check-title"><div class="section-heading"><div><p class="eyebrow">前置条件</p><h2 id="freeze-check-title">冻结前置条件</h2></div></div>
+    {% if issues or blockers %}<div class="alert-list" role="alert"><p><strong>尚不能冻结</strong>，请先处理以下事项：</p><ul>{% for issue in issues %}<li>{{ issue }}</li>{% endfor %}{% for blocker in blockers %}<li>{{ blocker }}</li>{% endfor %}</ul></div>{% else %}<div class="success-panel"><strong>满足冻结条件</strong><p>当前周期可生成只读快照。</p></div>{% endif %}
+    {% if management_freeze_url and not issues and not blockers %}<form method="post" action="{{ management_freeze_url }}" class="actions">{% csrf_token %}<button class="button button--primary" type="submit" data-confirm="冻结后将生成只读快照，本周期不能再修改，确认冻结？">生成冻结快照</button></form>{% endif %}
+  </section>
+  <section class="panel" aria-labelledby="snapshot-list-title"><div class="section-heading"><div><p class="eyebrow">快照清单</p><h2 id="snapshot-list-title">冻结快照</h2></div></div><div class="table-scroll"><table><caption class="sr-only">冻结快照记录</caption><thead><tr><th scope="col">编号</th><th scope="col">状态</th><th scope="col">创建时间</th><th scope="col">完成时间</th><th scope="col">操作</th></tr></thead><tbody>
+    {% for item in snapshots %}{% url 'management_snapshot_download' item.pk as download_url %}<tr><th scope="row" class="mono">{{ item.pk|default:'—' }}</th><td><span class="status status--{{ item.status|lower|default:'unknown' }}">{{ item.get_status_display|default:'生成中' }}</span></td><td>{{ item.created_at|default:'—' }}</td><td>{{ item.completed_at|default:'—' }}</td><td>{% if download_url and item.status == 'COMPLETE' %}<a class="text-link" href="{{ download_url }}">下载快照清单</a>{% else %}<span class="muted">不可下载</span>{% endif %}</td></tr>{% empty %}<tr><td colspan="5" class="empty-state">暂无冻结快照。</td></tr>{% endfor %}
+  </tbody></table></div></section>
+{% endblock %}

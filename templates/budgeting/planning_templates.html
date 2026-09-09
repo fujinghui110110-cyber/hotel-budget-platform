@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}模板与填报 · 酒店预算系统{% endblock %}
+{% block breadcrumb %}<span>模板与填报</span>{% endblock %}
+{% block content %}
+<section class="planning-heading"><div><h1>模板与填报</h1><p>统一预算模板、项目下载入口与填报审批工作区。</p></div><a class="button button--primary" href="{% url 'management_projects' %}">进入填报审批</a></section>
+<section class="template-layout">
+  <article class="panel template-hero"><span class="eyebrow">当前周期模板</span><h2>{% if template %}{{ template.name|default:template.version }}{% else %}尚未配置模板{% endif %}</h2><p>{{ source_note|default:"标准模板由预算周期统一控制，项目下载后按原结构填报并上传。" }}</p>{% if has_template %}{% if template.is_active %}<span class="status status--approved">已启用</span>{% else %}<span class="status status--pending">试填模板</span>{% endif %}{% else %}<span class="status status--pending">待配置</span>{% endif %}</article>
+  <article class="panel"><div class="section-heading"><div><h2>项目模板下载</h2><p>{% if cycle %}{{ cycle.name }} · {{ cycle.budget_year }}预算{% endif %}</p></div><form method="get"><label class="compact-field">周期<select name="cycle" onchange="this.form.submit()">{% for item in cycles %}<option value="{{ item.pk }}"{% if cycle and item.pk == cycle.pk %} selected{% endif %}>{{ item.name }}</option>{% endfor %}</select></label></form></div><div class="template-downloads">{% for item in downloads %}<div><span><strong>{{ item.project.code }} {{ item.project.name }}</strong><small>项目专用标准预算模板</small></span><a class="button button--small" href="{{ item.url }}">下载模板</a></div>{% empty %}<p class="empty-state">当前周期暂无可下载模板。</p>{% endfor %}</div></article>
+</section>
+<section class="panel">
+  <div class="section-heading">
+    <div><h2>预算底稿导出</h2><p>管理员可按预算周期下载当前批准版本或明确选择最新上传版本。</p></div>
+    <a class="button button--ghost" href="{% url 'management_workpaper_exports' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}">进入底稿导出</a>
+  </div>
+</section>
+{% endblock %}

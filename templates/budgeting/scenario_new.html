@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}新建经营场景 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}{% url 'scenario_list' as scenario_list_url %}{% if scenario_list_url %}<a href="{{ scenario_list_url }}">经营场景</a>{% endif %}<span aria-hidden="true">/</span><span>新建场景</span>{% endblock %}
+{% block content %}
+  {% url 'scenario_new' as scenario_new_url %}
+  <section class="page-heading page-heading--split"><div><p class="eyebrow">经营场景</p><h1>新建固定成本敏感性场景</h1><p class="lede">场景会锁定项目当前已批准上传版本的来源身份；基线被替换后，原场景不能继续写入。</p></div>{% if scenario_list_url %}<a class="button button--ghost" href="{{ scenario_list_url }}">返回场景台账</a>{% endif %}</section>
+  {% if error %}<div class="message message--error">{{ error }}</div>{% endif %}
+  <section class="panel narrow-panel" aria-labelledby="new-scenario-title">
+    <div class="section-heading"><div><p class="eyebrow">场景定义</p><h2 id="new-scenario-title">选择项目和基线</h2></div></div>
+    {% if scenario_new_url %}
+    <form method="post" action="{{ scenario_new_url }}" class="form-stack">
+      {% csrf_token %}
+      <div class="form-field"><label for="id_cycle">预算周期</label><select id="id_cycle" name="cycle" required><option value="">请选择预算周期</option>{% for item in cycles %}<option value="{{ item.pk }}" {% if cycle and item.pk == cycle.pk %}selected{% endif %}>{{ item.name }}（{{ item.budget_year }} R{{ item.revision_no }} · {{ item.get_status_display }}）</option>{% endfor %}</select></div>
+      <div class="form-field"><label for="id_project">项目</label><select id="id_project" name="project" required><option value="">请选择有已批准版本的项目</option>{% for item in project_baselines %}<option value="{{ item.project.pk }}" {% if not item.approved %}disabled{% endif %}>{{ item.project.code }} {{ item.project.name }}{% if not item.approved %}（暂无当前批准版本）{% endif %}</option>{% endfor %}</select></div>
+      <div class="form-field"><label for="id_name">场景名称</label><input id="id_name" type="text" name="name" maxlength="120" value="{{ name }}" placeholder="例：旺季出租率提升 5%" required></div>
+      <div class="panel panel--muted"><strong>固定成本口径</strong><p class="muted">测算只改变客房经营驱动及其收入差额联动利润，成本费用绝对额保持基线不变，不执行成本重算公式。</p></div>
+      <div class="actions actions--end"><button class="button button--primary" type="submit">创建场景</button></div>
+    </form>
+    {% else %}<p class="empty-state">当前 URL 配置尚未启用场景路由。</p>{% endif %}
+  </section>
+{% endblock %}

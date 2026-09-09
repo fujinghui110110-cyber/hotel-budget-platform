@@ -1,0 +1,70 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}酒店预算系统{% endblock %}</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="app-shell{% block body_class %}{% endblock %}">
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  {% if user.is_authenticated %}
+  <div class="workspace">
+    <aside class="sidebar" aria-label="主导航">
+      <a class="brand" href="{% if user.is_admin_role %}/management/planning/{% else %}{% url 'project_dashboard' %}{% endif %}">
+        <span class="brand__mark" aria-hidden="true">预</span>
+        <span><strong>酒店预算系统</strong><small>酒店管理公司</small></span>
+      </a>
+      {% if user.is_admin_role %}
+      <nav class="side-nav">
+        <a href="/management/planning/" class="{% if request.resolver_match.url_name == 'planning_overview' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/layout-dashboard.svg' %}" alt="">预算总览</a>
+        <a href="/management/project-budgets/" class="{% if request.resolver_match.url_name == 'planning_projects' or request.resolver_match.url_name == 'management_report' or request.resolver_match.url_name == 'report_catalog' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/building-2.svg' %}" alt="">项目预算</a>
+        <a href="{% url 'scenario_list' %}" class="{% if 'scenario' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calculator.svg' %}" alt="">预算测算</a>
+        <a href="{% url 'cockpit_trend' %}" class="{% if 'trend' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/chart-no-axes-combined.svg' %}" alt="">收入与成本分析</a>
+        <a href="{% url 'cockpit_questions' %}" class="{% if 'question' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/messages-square.svg' %}" alt="">审核问答</a>
+        <a href="/management/templates/" class="{% if request.resolver_match.url_name == 'planning_templates' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">模板与填报</a>
+      </nav>
+      <div class="side-nav side-nav--secondary">
+        <span class="side-nav__caption">系统设置</span>
+        <a href="{% url 'management_cycles' %}" class="{% if request.resolver_match.url_name == 'management_cycles' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calendar-range.svg' %}" alt="">预算周期</a>
+        <a href="{% url 'management_org' %}" class="{% if request.resolver_match.url_name == 'management_org' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/users.svg' %}" alt="">组织与账号</a>
+        <a href="{% url 'management_audit' %}" class="{% if request.resolver_match.url_name == 'management_audit' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/scroll-text.svg' %}" alt="">审计留痕</a>
+      </div>
+      {% else %}
+      <nav class="side-nav">
+        <span class="side-nav__caption">{{ user.project.code|default:'项目端' }} · {{ user.project.name|default:'项目工作区' }}</span>
+        <a href="{% url 'project_dashboard' %}" class="{% if request.resolver_match.url_name == 'project_dashboard' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/layout-dashboard.svg' %}" alt="">项目工作台</a>
+        <a href="{% url 'project_upload_new' %}" class="{% if request.resolver_match.url_name == 'project_upload_new' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">上传预算</a>
+        <a href="{% url 'project_template' %}" class="{% if request.resolver_match.url_name == 'project_template' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">模板下载</a>
+        <a href="{% url 'project_adjustments' %}" class="{% if request.resolver_match.url_name == 'project_adjustments' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calculator.svg' %}" alt="">调整任务</a>
+        <a href="{% url 'project_history' %}" class="{% if request.resolver_match.url_name == 'project_history' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calendar-range.svg' %}" alt="">历史版本</a>
+        <a href="{% url 'project_report_catalog' %}" class="{% if 'report' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/chart-no-axes-combined.svg' %}" alt="">全部报表</a>
+      </nav>
+      {% endif %}
+      <div class="sidebar__account">
+        <span class="avatar" aria-hidden="true">{{ user.username|slice:":1"|upper }}</span>
+        <span><strong>{{ user.get_full_name|default:user.username }}</strong><small>{% if user.is_admin_role %}财务负责人{% else %}项目填报人{% endif %}</small></span>
+        <form method="post" action="{% url 'logout' %}" class="inline-form">{% csrf_token %}<button type="submit" class="sidebar__logout">退出</button></form>
+      </div>
+    </aside>
+    <div class="app-stage">
+      <header class="topbar">
+        <nav class="breadcrumb" aria-label="面包屑导航">{% block breadcrumb %}<span>预算管理</span>{% endblock %}</nav>
+        <div class="topbar__meta">{% if cycle %}<form method="get" action="{{ request.path }}" class="topbar__year"><label for="global-cycle">编制年度</label>{% if cycles %}<select id="global-cycle" name="cycle" onchange="this.form.submit()">{% for item in cycles %}<option value="{{ item.pk }}"{% if item.pk == cycle.pk %} selected{% endif %}>{{ item.budget_year }} 预算</option>{% endfor %}</select>{% else %}<strong>{{ cycle.budget_year }} 预算</strong>{% endif %}</form>{% endif %}</div>
+      </header>
+  {% endif %}
+      <main id="main-content" class="main-content{% if not user.is_authenticated %} main-content--auth{% endif %}">
+        {% if messages %}{% for message in messages %}<p class="message {% if message.tags == 'error' %}message--error{% elif message.tags == 'success' %}message--success{% endif %}">{{ message }}</p>{% endfor %}{% endif %}
+        {% block content %}{% endblock %}
+      </main>
+  {% if user.is_authenticated %}
+    </div>
+  </div>
+  {% endif %}
+  <script src="{% static 'budgeting/budgeting.js' %}" defer></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

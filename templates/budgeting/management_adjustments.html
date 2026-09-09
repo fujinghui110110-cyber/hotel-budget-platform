@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% load budget_tags %}
+{% block title %}调整中心 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}<span>管理端</span><span aria-hidden="true">/</span><span>调整中心</span>{% endblock %}
+{% block content %}
+  {% url 'management_projects' as management_projects_url %}
+  <section class="page-heading page-heading--split">
+    <div>
+      <p class="eyebrow">调整中心</p>
+      <h1>预算统筹调整</h1>
+      <p class="lede">对单项目报表的任意叶子项做年度或月度调整，系统按模板公式自底向上联动重算派生项（总收入 / 经营毛利润 / 净利润等），并给出调整前后全表对比后下发。</p>
+    </div>
+    {% if management_projects_url %}<a class="button button--ghost" href="{{ management_projects_url }}">返回项目进度</a>{% endif %}
+  </section>
+
+  {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
+
+  {% if cycle %}
+  <details class="panel panel--collapsible" {% if not full %}open{% endif %}>
+    <summary class="section-heading">
+      <div><p class="eyebrow">快速调整</p><h2>单驱动快速调整</h2></div>
+      <span class="muted">出租率 / 平均房价 / 房间数 / 客房收入</span>
+    </summary>
+    <form method="post" action="{% url 'management_adjustments' %}" class="form-stack">
+      {% csrf_token %}
+      <div class="form-row">
+        <div class="form-field">
+          <label for="id_project">项目</label>
+          <select id="id_project" name="project">
+            <option value="">请选择项目</option>
+            {% for p in projects %}<option value="{{ p.pk }}" {% if form_data.project == p.pk|stringformat:'s' %}selected{% endif %}>{{ p.code }} {{ p.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="id_driver">业务驱动指标</label>
+          <select id="id_driver" name="driver">
+            {% for opt in driver_options %}<option value="{{ opt.code }}" {% if form_data.driver == opt.code %}selected{% endif %}>{{ opt.label }}（{{ opt.unit }}）</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="id_to_value">目标值 <small id="driver-unit-hint" class="muted">%</small></label>
+          <input type="number" step="any" id="id_to_value" name="to_value" value="{{ form_data.to_value }}">
+        </div>
+        <div class="form-field">
+          <label for="id_due_date">期限（可选）</label>
+          <input type="date" id="id_due_date" name="due_date" value="{{ form_data.due_date }}">
+        </div>
+      </div>
+      <div class="form-field">
+        <label for="id_reason">调整原因</label>
+        <textarea id="id_reason" name="reason" rows="2" placeholder="例：出租率目标上调，联动测算收入与利润">{{ form_data.reason }}</textarea>
+      </div>
+      <div class="actions actions--end">
+        <button type="submit" name="action" value="driver_preview" class="button button--ghost">测算预览</button>
+        <button type="submit" name="action" value="driver_issue" class="button button--primary">确认下发</button>
+      </div>
+    </form>
+    <script>
+      (function () {
+        var units = { OCC: '%', ADR: '元', ROOMS: '间', ROOM_REV: '万元' };
+        var driver = document.getElementById('id_driver');
+        var hint = document.getElementById('driver-unit-hint');
+        if (driver && hint) {
+          hint.textContent = units[driver.value] || '';
+          driver.addEventListener('change', function () { hint.textContent = units[driver.value] || ''; });
+        }
+      })();
+    </script>
+  </details>
+
+  {% if preview %}
+  <section class="panel" aria-labelledby="preview-title">
+    <div class="section-heading">
+      <div><p class="eyebrow">快速调整测算</p><h2 id="preview-title">{{ preview.driver_label }}：{{ preview.from_display }} → {{ preview.to_display }}</h2></div>
+      <span class="badge">客房收入变动 {{ preview.delta_room_rev_display }} 万元</span>
+    </div>
+    <div class="table-scroll">
+      <table class="cascade-table">
+        <caption class="sr-only">驱动联动测算前后对比</caption>
+        <thead><tr><th scope="col">指标</th><th scope="col">单位</th><th scope="col" class="num">调整前</th><th scope="col" class="num">调整后</th></tr></thead>
+        <tbody>
+          {% for row in preview.rows %}
+          <tr {% if row.key == 'ROOM_REV' or row.key == 'NET' %}class="is-emphasis"{% endif %}>
+            <th scope="row">{{ row.label }}</th>
+            <td class="muted">{{ row.unit_label }}</td>
+            <td class="num">{{ row.baseline }}</td>
+            <td class="num">{{ row.projected }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="panel" aria-labelledby="full-worksheet-title">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">全表调整</p>
+        <h2 id="full-worksheet-title">报表叶子项编辑与全盘联动</h2>
+      </div>
+    </div>
+    <form method="post" action="{% url 'management_adjustments' %}" class="form-stack">
+      {% csrf_token %}
+      <div class="form-row">
+        <div class="form-field">
+          <label for="id_full_project">项目</label>
+          <select id="id_full_project" name="full_project">
+            <option value="">请选择项目</option>
+            {% for p in projects %}<option value="{{ p.pk }}" {% if full_data.project == p.pk|stringformat:'s' %}selected{% endif %}>{{ p.code }} {{ p.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="id_report_code">报表</label>
+          <select id="id_report_code" name="report_code">
+            {% for code, name in report_options %}<option value="{{ code }}" {% if full_data.report_code == code %}selected{% endif %}>{{ name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="id_full_due_date">期限（可选）</label>
+          <input type="date" id="id_full_due_date" name="full_due_date" value="{{ full_data.due_date }}">
+        </div>
+      </div>
+      <div class="form-field">
+        <label for="id_full_reason">调整原因</label>
+        <textarea id="id_full_reason" name="full_reason" rows="2" placeholder="例：客房收入目标上调、能耗成本下调">{{ full_data.reason }}</textarea>
+      </div>
+
+      {% if full %}
+      <div class="form-field muted">
+        已选项目 <strong>{{ full.project_name }}</strong>，共 <strong>{{ full.rows|length }}</strong> 行（其中可编辑叶子项 <strong>{{ full.edited|length }}</strong> 项已改动）。黄色输入框为可编辑叶子项，灰色为联动派生项（只读）。
+      </div>
+      <div class="table-scroll table-scroll--wide">
+        <table class="worksheet-table">
+          <thead>
+            <tr>
+              <th scope="col" class="sticky-col">指标</th>
+              <th scope="col">单位</th>
+              <th scope="col">类型</th>
+              {% for col in full.period_cols %}<th scope="col" class="num">{{ col.label }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in full.rows %}
+            <tr class="{% if row.kind == 'derived' %}is-derived{% endif %}">
+              <th scope="row" class="sticky-col" title="{{ row.code }}">{{ row.label }}</th>
+              <td class="muted">{{ row.unit_label }}</td>
+              <td><span class="badge badge--{{ row.kind }}">{% if row.kind == 'leaf' %}可编辑{% else %}联动{% endif %}</span></td>
+              {% for col in full.period_cols %}
+                {% if row.kind == 'leaf' %}
+                <td class="num"><input class="edit-cell" type="number" step="any" name="edit_{{ row.code }}_{{ col.key }}" value="{{ row.cells|get_item:col.key }}"></td>
+                {% else %}
+                <td class="num muted">{{ row.cells|get_item:col.key }}</td>
+                {% endif %}
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if full.edited %}
+      <div class="section-heading"><div><p class="eyebrow">前后对比</p><h3>全盘影响（年度）</h3></div></div>
+      <div class="table-scroll">
+        <table class="cascade-table">
+          <caption class="sr-only">全表调整前后对比</caption>
+          <thead><tr><th scope="col">指标</th><th scope="col">单位</th><th scope="col" class="num">调整前</th><th scope="col" class="num">调整后</th><th scope="col" class="num">差异</th></tr></thead>
+          <tbody>
+            {% for row in full.rows %}
+            {% if row.changed %}
+            <tr class="is-emphasis">
+              <th scope="row">{{ row.label }}</th>
+              <td class="muted">{{ row.unit_label }}</td>
+              <td class="num">{{ row.before_year }}</td>
+              <td class="num">{{ row.after_year }}</td>
+              <td class="num {% if row.diff_year > 0 %}diff--pos{% elif row.diff_year < 0 %}diff--neg{% endif %}">{% if row.diff_year > 0 %}+{% endif %}{{ row.diff_year|cascade:row.unit }}</td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      <div class="actions actions--end">
+        <button type="submit" name="action" value="full_preview" class="button button--ghost">测算全盘联动</button>
+        <button type="submit" name="action" value="full_issue" class="button button--primary">确认下发全表调整</button>
+      </div>
+      {% else %}
+      <div class="actions actions--end">
+        <button type="submit" name="action" value="full_preview" class="button button--primary">载入报表</button>
+      </div>
+      {% endif %}
+    </form>
+  </section>
+  {% else %}
+  <section class="panel empty-state">
+    <h2>没有开放周期</h2>
+    <p class="muted">请先在「预算周期」中开放周期，再进行调整下发。</p>
+  </section>
+  {% endif %}
+
+  <section class="panel" aria-labelledby="batch-list-title">
+    <div class="section-heading"><div><p class="eyebrow">已下发</p><h2 id="batch-list-title">调整任务</h2></div><span class="muted">{{ batches|length }} 个批次</span></div>
+    {% for batch in batches %}
+    <article class="list-row">
+      <div>
+        <strong>{% if batch.project %}{{ batch.project.code }} {{ batch.project.name }}{% else %}全局{% endif %}</strong>
+        <p class="muted">{% if batch.driver_label %}{{ batch.driver_label }} · {% endif %}{{ batch.reason|default:'项目级调整' }}</p>
+        {% if batch.cascade.kind == 'full' %}
+        <p class="muted">{{ batch.report_code|report_name }} 全表调整 · 差额 {{ batch.delta_cents|yuan }} 元</p>
+        {% elif batch.driver_label %}
+        <p class="muted">客房收入目标 {{ batch.target_room_rev_cents|cascade:'MONEY' }} 万元 · 差额 {{ batch.delta_cents|yuan }} 元</p>
+        {% else %}
+        <p class="muted">{{ batch.row_label }} · {{ batch.period }} · 差额 {{ batch.delta_cents|yuan }} 元</p>
+        {% endif %}
+      </div>
+      <div class="list-row__meta">
+        <a href="{% url 'management_adjustment_issue' batch.pk %}">查看逐项目标</a>
+        <span class="status status--{{ batch.status|lower|default:'pending' }}">{{ batch.get_status_display }}</span>
+      </div>
+    </article>
+    {% empty %}
+    <p class="empty-state">暂无调整任务。</p>
+    {% endfor %}
+  </section>
+{% endblock %}

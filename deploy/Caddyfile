@@ -1,0 +1,12 @@
+{$BUDGET_DOMAIN:?set BUDGET_DOMAIN in the production environment file} {
+    encode gzip
+
+    handle_path /static/* {
+        root * /srv/static
+        file_server
+    }
+
+    handle {
+        reverse_proxy web:8000
+    }
+}

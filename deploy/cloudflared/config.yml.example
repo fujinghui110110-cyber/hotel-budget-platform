@@ -1,0 +1,11 @@
+# Named Cloudflare Tunnel example for the Mac host.
+# Replace the UUID, credentials path and hostname after creating a named
+# tunnel in the user's own Cloudflare account. Do not use Quick Tunnels for
+# business access and do not commit the generated JSON credentials file.
+tunnel: REPLACE_WITH_TUNNEL_UUID
+credentials-file: /Users/frank/.cloudflared/REPLACE_WITH_TUNNEL_UUID.json
+
+ingress:
+  - hostname: budget.example.com
+    service: http://127.0.0.1:8768
+  - service: http_status:404

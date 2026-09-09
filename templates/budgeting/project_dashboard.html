@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}项目工作台 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}<span>项目工作台</span>{% endblock %}
+{% block content %}
+  {% url 'project_template_download' as template_download_url %}
+  {% url 'project_upload_new' as upload_new_url %}
+  {% url 'project_history' as history_url %}
+  {% url 'project_adjustments' as adjustments_url %}
+  <section class="page-heading page-heading--split">
+    <div>
+      <p class="eyebrow">项目工作台</p>
+      <h1>项目工作台</h1>
+      <p class="lede">上传统一预算套表，查看校验状态，并跟踪管理端的调整要求。</p>
+    </div>
+    <div class="actions actions--end">
+      {% if template_download_url %}<a class="button button--secondary" href="{{ template_download_url }}">下载标准模板</a>{% endif %}
+      {% if upload_new_url %}<a class="button button--primary" href="{{ upload_new_url }}">上传预算套表</a>{% endif %}
+    </div>
+  </section>
+
+  <section class="summary-grid" aria-label="项目概况">
+    <article class="summary-card">
+      <span class="summary-card__label">当前项目</span>
+      {% if project %}<strong>{{ project.name|default:'未绑定项目' }}</strong><small>{{ project.code|default:'—' }}</small>
+      {% elif user.project %}<strong>{{ user.project.name|default:'未绑定项目' }}</strong><small>{{ user.project.code|default:'—' }}</small>
+      {% else %}<strong>未绑定项目</strong><small>—</small>{% endif %}
+    </article>
+    <article class="summary-card">
+      <span class="summary-card__label">当前周期</span>
+      {% if project_cycle %}<strong>{{ project_cycle.name|default:'暂无开放周期' }}</strong><small>{{ project_cycle.status|default:'—' }}</small>
+      {% elif current_cycle %}<strong>{{ current_cycle.name|default:'暂无开放周期' }}</strong><small>{{ current_cycle.status|default:'—' }}</small>
+      {% elif cycle %}<strong>{{ cycle.name|default:'暂无开放周期' }}</strong><small>{{ cycle.status|default:'—' }}</small>
+      {% else %}<strong>暂无开放周期</strong><small>—</small>{% endif %}
+    </article>
+    <article class="summary-card">
+      <span class="summary-card__label">预算版本</span>
+      <strong>{{ uploads|length|default:'0' }}</strong>
+      <small>本周期留痕记录</small>
+    </article>
+  </section>
+
+  <section class="panel" aria-labelledby="workflow-title">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">下一步操作</p>
+        <h2 id="workflow-title">项目处理流程</h2>
+      </div>
+      {% if history_url %}<a class="text-link" href="{{ history_url }}">查看全部历史</a>{% endif %}
+    </div>
+    <ol class="step-list">
+      <li class="step-list__item"><span class="step-list__number">1</span><span><strong>下载模板</strong><small>使用管理端发布的统一版本。</small></span></li>
+      <li class="step-list__item"><span class="step-list__number">2</span><span><strong>上传并校验</strong><small>原文件和校验结果按版本保存。</small></span></li>
+      <li class="step-list__item"><span class="step-list__number">3</span><span><strong>提交复核</strong><small>无阻断错误后提交管理端复核。</small></span></li>
+    </ol>
+  </section>
+
+  <section class="panel" aria-labelledby="uploads-title">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">版本台账</p>
+        <h2 id="uploads-title">最近上传</h2>
+      </div>
+      {% if upload_new_url %}<a class="text-link" href="{{ upload_new_url }}">新建上传</a>{% endif %}
+    </div>
+    <div class="table-scroll">
+      <table>
+        <caption class="sr-only">项目预算版本列表</caption>
+        <thead><tr><th scope="col">文件</th><th scope="col">上传时间</th><th scope="col">状态</th><th scope="col">文件指纹</th><th scope="col">操作</th></tr></thead>
+        <tbody>
+          {% for upload in uploads %}
+            {% url 'project_upload_detail' upload.pk as upload_detail_url %}
+            <tr>
+              <td><strong>{{ upload.original_name|default:'预算套表' }}</strong></td>
+              <td>{{ upload.created_at|default:'—' }}</td>
+              <td><span class="status status--{{ upload.status|lower|default:'unknown' }}">{{ upload.get_status_display|default:upload.status|default:'待处理' }}</span></td>
+              <td class="mono">{{ upload.sha256|default:'—' }}</td>
+              <td>{% if upload_detail_url %}<a class="text-link" href="{{ upload_detail_url }}">查看版本</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="empty-state">本周期还没有预算版本。下载模板后即可开始。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="adjustment-title">
+    <div class="section-heading">
+      <div><p class="eyebrow">调整复核</p><h2 id="adjustment-title">待处理调整</h2></div>
+      {% if adjustments_url %}<a class="text-link" href="{{ adjustments_url }}">打开调整中心</a>{% endif %}
+    </div>
+    {% if open_lines %}
+      <p>有 <strong>{{ open_lines|length }}</strong> 项调整待你处理：请按目标值重新上传预算套表。</p>
+      {% if upload_new_url %}<a class="button button--secondary" href="{{ upload_new_url }}">去上传新版本</a>{% endif %}
+    {% elif adjustment_batches %}
+      <p>管理端已留下调整事项，请在提交下一版本前完成处理。</p>
+    {% else %}
+      <p class="muted">当前没有待处理调整。</p>
+    {% endif %}
+  </section>
+{% endblock %}

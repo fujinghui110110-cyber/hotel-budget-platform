@@ -1,0 +1,45 @@
+{% extends "budgeting/base.html" %}
+{% block title %}上传详情 · 酒店预算与损益{% endblock %}
+{% block breadcrumb %}{% url 'project_dashboard' as project_dashboard_url %}<a href="{{ project_dashboard_url|default:'#' }}">项目首页</a><span aria-hidden="true">/</span><span>上传详情</span>{% endblock %}
+{% block content %}
+{% url 'project_upload_submit' upload.pk as submit_url %}
+{% url 'project_upload_detail' upload.pk as detail_url %}
+<section class="page-heading page-heading--split">
+    <div>
+        <p class="eyebrow">UPLOAD DETAIL / {{ upload.version|default:'版本' }}</p>
+        <h1>{{ upload.file_name|default:upload.filename|default:'预算模板.xlsx' }}</h1>
+        <p class="page-heading__lead">上传于 {{ upload.created_at|default:upload.uploaded_at|default:'—' }} · {{ upload.created_by|default:'项目用户' }}</p>
+    </div>
+    <div class="page-heading__actions">
+        <span class="status-badge status-badge--{{ upload.status|default:'pending'|lower }} status-badge--large">{{ upload.status_label|default:upload.status|default:'待检查' }}</span>
+        {% if can_submit and submit_url %}<form method="post" action="{{ submit_url }}" class="inline-form">{% csrf_token %}<button class="button button--primary" type="submit" data-confirm="确认提交此版本？提交后管理端将看到该版本。">提交此版本</button></form>{% endif %}
+    </div>
+</section>
+<section class="status-strip" aria-label="上传检查摘要">
+    <div class="status-strip__item"><span class="status-strip__label">模板版本</span><strong>{{ upload.template_version|default:'统一模板' }}</strong><span class="muted">已识别</span></div>
+    <div class="status-strip__item"><span class="status-strip__label">检查项</span><strong>{{ upload.issue_count|default:upload.issues|length|default:'0' }}</strong><span class="muted">需要关注的问题</span></div>
+    <div class="status-strip__item"><span class="status-strip__label">文件大小</span><strong>{{ upload.file_size|default:'—' }}</strong><span class="muted">原文件未修改</span></div>
+</section>
+<section class="section-block" aria-labelledby="issues-heading">
+    <div class="section-heading"><div><p class="eyebrow">VALIDATION ISSUES</p><h2 id="issues-heading">检查问题</h2></div><span class="section-heading__hint">先处理错误，再提交版本</span></div>
+    <div class="table-card">
+        <div class="table-scroll">
+            <table class="data-table data-table--issues">
+                <caption class="sr-only">上传文件检查问题列表</caption>
+                <thead><tr><th scope="col">级别</th><th scope="col">位置</th><th scope="col">问题</th><th scope="col">建议处理</th><th scope="col">状态</th></tr></thead>
+                <tbody>
+                {% for issue in upload.issues %}
+                    <tr><td><span class="issue-level issue-level--{{ issue.level|default:'warning'|lower }}">{{ issue.level_label|default:issue.level|default:'提醒' }}</span></td><td><code>{{ issue.location|default:issue.cell|default:'—' }}</code></td><td><strong>{{ issue.title|default:'需要检查的单元格' }}</strong><small class="table-subtext">{{ issue.message|default:issue.description|default:'系统发现一项需要确认的内容。' }}</small></td><td>{{ issue.suggestion|default:'请回到原文件核对后重新上传。' }}</td><td>{% if issue.resolved %}<span class="status-badge status-badge--passed">已处理</span>{% else %}<span class="status-badge status-badge--warning">待处理</span>{% endif %}</td></tr>
+                {% empty %}
+                    <tr><td colspan="5"><div class="empty-state empty-state--success"><span class="empty-state__icon" aria-hidden="true">✓</span><strong>未发现需要处理的问题</strong><p>该版本已通过模板、公式和勾稽检查，可以提交。</p></div></td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+<section class="content-grid content-grid--two">
+    <article class="panel-card"><div class="panel-card__heading"><div><p class="eyebrow">SYSTEM NOTE</p><h2>检查说明</h2></div></div><p class="prose">平台只读取上传文件并生成检查结果，不会回写或覆盖本地原始 Excel。请以原文件为准修正后，再上传新版本。</p></article>
+    <article class="panel-card"><div class="panel-card__heading"><div><p class="eyebrow">VERSION</p><h2>版本信息</h2></div></div><dl class="definition-list"><div><dt>文件哈希</dt><dd>{{ upload.checksum|default:'未生成' }}</dd></div><div><dt>检查时间</dt><dd>{{ upload.checked_at|default:'—' }}</dd></div><div><dt>来源周期</dt><dd>{{ upload.period|default:project_cycle.period|default:'—' }}</dd></div></dl></article>
+</section>
+{% endblock %}

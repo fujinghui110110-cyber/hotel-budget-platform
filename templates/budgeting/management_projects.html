@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}项目进度 · 酒店预算与损益管理平台{% endblock %}
+
+{% block breadcrumb %}
+  <span>管理端</span><span aria-hidden="true">/</span><span>项目进度</span>
+{% endblock %}
+
+{% block content %}
+  {% url 'management_cycles' as management_cycles_url %}
+  {% url 'management_adjustments' as management_adjustments_url %}
+  {% url 'report_catalog' as report_catalog_url %}
+  {% url 'reference_catalog' as ref_url %}
+
+  <section class="page-heading page-heading--split">
+    <div>
+      <p class="eyebrow">项目控制</p>
+      <h1>项目进度</h1>
+      <p class="lede">当前周期：{% if cycle %}{{ cycle.name }}（{{ cycle.get_status_display }}）{% else %}暂无开放周期{% endif %}。</p>
+    </div>
+    <div class="actions actions--end">
+      <a class="button button--secondary" href="{{ report_catalog_url }}">全部报表</a>
+      {% if ref_url %}<a class="button button--secondary" href="{{ ref_url }}">真实项目历史原表</a>{% endif %}
+      <a class="button button--secondary" href="{{ management_adjustments_url }}">调整中心</a>
+      <a class="button button--ghost" href="{{ management_cycles_url }}">预算周期</a>
+    </div>
+  </section>
+
+  <section class="summary-grid" aria-label="项目汇总">
+    <article class="summary-card"><span class="summary-card__label">项目数</span><strong>{{ project_count|default:0 }}</strong><small>当前周期</small></article>
+    <article class="summary-card"><span class="summary-card__label">待复核</span><strong>{{ submitted_count|default:0 }}</strong><small>已提交 · 等待批准或打回</small></article>
+    <article class="summary-card"><span class="summary-card__label">当前周期</span><strong>{% if cycle %}{{ cycle.get_status_display }}{% else %}—{% endif %}</strong><small>{% if cycle %}{{ cycle.budget_year }} 年度{% else %}—{% endif %}</small></article>
+  </section>
+
+  <section class="panel" aria-labelledby="project-progress-title">
+    <div class="section-heading">
+      <div><p class="eyebrow">项目台账</p><h2 id="project-progress-title">项目上传状态</h2></div>
+      <span class="section-heading__hint">每个项目可直接查看全部分表</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <caption class="sr-only">当前周期项目上传状态</caption>
+        <thead><tr><th scope="col">项目</th><th scope="col">当前正式版本</th><th scope="col">最新上传</th><th scope="col">状态</th><th scope="col">操作</th><th scope="col">报表</th></tr></thead>
+        <tbody>
+          {% for row in rows %}
+            {% with upload=row.latest current=row.current %}
+              <tr>
+                <th scope="row">{{ row.project.code }} {{ row.project.name }}</th>
+                <td>{% if current %}{{ current.original_name|default:current.pk }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                <td>{% if upload %}{{ upload.original_name|default:upload.pk }}<small class="muted">{{ upload.created_at|date:"m-d" }}</small>{% else %}<span class="muted">尚未上传</span>{% endif %}</td>
+                <td>{% if upload %}<span class="status-badge status-badge--{{ upload.status|lower }}">{{ upload.get_status_display }}</span>{% else %}<span class="status-badge">待上传</span>{% endif %}</td>
+                <td>
+                  {% if upload %}
+                    <a class="text-link" href="{% url 'project_upload_detail' upload.pk %}">查看</a>
+                    {% if upload.status == 'SUBMITTED' %}
+                      <form method="post" action="{% url 'management_approve_upload' upload.pk %}" class="inline-form">
+                        {% csrf_token %}<button class="button button--small" type="submit" data-confirm="批准后将切换为正式版本，确认？">批准</button>
+                      </form>
+                    {% endif %}
+                  {% else %}<span class="muted">—</span>{% endif %}
+                </td>
+                <td><a class="text-link" href="{{ report_catalog_url }}?project_id={{ row.project.id }}">全部分表</a></td>
+              </tr>
+            {% endwith %}
+          {% empty %}
+            <tr><td colspan="6" class="empty-state">当前周期暂无项目。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="table-footnote"><span aria-hidden="true">i</span>「查看」进入版本详情后，可批准或打回已提交的版本；打回时需填写原因。</p>
+  </section>
+
+  <section aria-labelledby="report-shortcuts-title">
+    <div class="section-heading"><div><p class="eyebrow">报表</p><h2 id="report-shortcuts-title">快速查看四表</h2></div><a class="text-link" href="{{ report_catalog_url }}">查看全部报表</a></div>
+    <div class="report-link-grid report-link-grid--compact">
+      {% url 'management_report' 'PL_TOTAL_WINE' as report_total_wine_url %}
+      {% url 'management_report' 'PL_TOTAL_NOWINE' as report_total_nowine_url %}
+      {% url 'management_report' 'PL_ZZ_WINE' as report_zz_wine_url %}
+      {% url 'management_report' 'PL_ZZ_NOWINE' as report_zz_nowine_url %}
+      <a class="report-link" href="{{ report_total_wine_url }}">酒店损益总表（含名酒）</a>
+      <a class="report-link" href="{{ report_total_nowine_url }}">酒店损益总表（不含名酒）</a>
+      <a class="report-link" href="{{ report_zz_wine_url }}">损益表（含名酒）（拆中智）</a>
+      <a class="report-link" href="{{ report_zz_nowine_url }}">损益表（不含名酒）（拆中智）</a>
+    </div>
+  </section>
+{% endblock %}

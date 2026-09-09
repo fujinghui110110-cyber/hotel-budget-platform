@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% load budget_tags %}
+{% block title %}预算版本详情 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}
+  {% url 'project_dashboard' as project_dashboard_url %}
+  {% if project_dashboard_url %}<a href="{{ project_dashboard_url }}">项目工作台</a><span aria-hidden="true">/</span>{% endif %}
+  <span>预算版本详情</span>
+{% endblock %}
+{% block content %}
+{% if upload.status == 'RECEIVED' or upload.status == 'PROCESSING' %}
+<section class="message message--info" role="status" data-status-url="{% url 'upload_status' upload.pk %}">
+  <strong data-upload-status>{{ upload.get_status_display }}</strong> · 系统正在后台重算并校验预算，完成后本页会自动刷新。也可以关闭页面，稍后从历史版本查看结果。
+</section>
+{% endif %}
+  {% url 'project_dashboard' as project_dashboard_url %}
+  {% if upload %}{% url 'project_upload_submit' upload.pk as submit_url %}{% url 'upload_status_api' upload.pk as status_api_url %}{% url 'management_upload_approve' upload.pk as approve_url %}{% url 'management_reject_upload' upload.pk as reject_url %}{% endif %}
+  <section class="page-heading page-heading--split">
+    <div>
+      <p class="eyebrow">上传详情</p>
+      <h1>预算版本详情</h1>
+      <p class="lede">{{ upload.original_name|default:'预算套表' }}</p>
+    </div>
+    <div class="actions actions--end">
+      {% if project_dashboard_url %}<a class="button button--ghost" href="{{ project_dashboard_url }}">返回工作台</a>{% endif %}
+      {% if submit_url and upload.status == 'VALIDATED' %}
+        <form method="post" action="{{ submit_url }}" class="inline-form">
+          {% csrf_token %}
+          <button class="button button--primary" type="submit" data-confirm="提交后将由管理端复核，确认提交？">提交管理端复核</button>
+        </form>
+      {% endif %}
+      {% if is_admin and upload.status == 'SUBMITTED' %}
+        <form method="post" action="{{ approve_url }}" class="inline-form">
+          {% csrf_token %}
+          <button class="button button--primary" type="submit" data-confirm="批准后将切换为该项目的正式版本，确认？">批准并切换正式版本</button>
+        </form>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="summary-grid" aria-label="预算版本概况">
+    <article class="summary-card">
+      <span class="summary-card__label">版本状态</span>
+      <strong><span class="status status--{{ upload.status|lower|default:'unknown' }}">{{ upload.get_status_display|default:'待处理' }}</span></strong>
+      <small>以系统记录为准</small>
+    </article>
+    <article class="summary-card">
+      <span class="summary-card__label">上传时间</span>
+      <strong>{{ upload.created_at|default:'—' }}</strong>
+      <small>{{ upload.project.name|default:'本项目' }}</small>
+    </article>
+    <article class="summary-card">
+      <span class="summary-card__label">模板版本</span>
+      <strong>{% if upload.template %}{{ upload.template.version|default:'统一模板' }}{% else %}统一模板{% endif %}</strong>
+      <small>原文件不可变</small>
+    </article>
+  </section>
+
+  {% if upload.status == 'REJECTED' and upload.note %}
+    <div class="message message--error" role="alert"><strong>未通过校验：</strong>{{ upload.note }}</div>
+  {% endif %}
+
+  <section class="panel" aria-labelledby="provenance-title">
+    <div class="section-heading"><div><p class="eyebrow">数据穿透</p><h2 id="provenance-title">文件留痕</h2></div></div>
+    <dl class="detail-grid">
+      <div><dt>项目</dt><dd>{{ upload.project.name|default:'—' }}</dd></div>
+      <div><dt>周期</dt><dd>{{ upload.cycle.name|default:'—' }}</dd></div>
+      <div class="detail-grid__wide"><dt>文件指纹</dt><dd class="mono">{{ upload.sha256|default:'—' }}</dd></div>
+      <div><dt>处理任务</dt><dd>{% if job %}{{ job.get_status_display|default:job.status }}{% else %}—{% endif %}</dd></div>
+    </dl>
+  </section>
+
+  {% if is_admin and upload.status == 'SUBMITTED' and reject_url %}
+    <section class="panel" aria-labelledby="reject-title">
+      <div class="section-heading"><div><p class="eyebrow">打回</p><h2 id="reject-title">打回版本</h2></div></div>
+      <form method="post" action="{{ reject_url }}" class="form-stack">
+        {% csrf_token %}
+        {{ reject_form.as_p }}
+        <div class="actions"><button class="button button--secondary" type="submit" data-confirm="打回后项目端需重新上传，确认打回？">确认打回</button></div>
+      </form>
+    </section>
+  {% endif %}
+
+  <section class="panel" aria-labelledby="issues-title">
+    <div class="section-heading"><div><p class="eyebrow">校验</p><h2 id="issues-title">校验问题</h2></div><span class="badge">{{ issues|length|default:'0' }} 条记录</span></div>
+    <div class="table-scroll">
+      <table>
+        <caption class="sr-only">预算版本校验问题</caption>
+        <thead><tr><th scope="col">级别</th><th scope="col">编码</th><th scope="col">位置</th><th scope="col">说明</th><th scope="col">处理状态</th></tr></thead>
+        <tbody>
+          {% for issue in issues %}
+            <tr>
+              <td><span class="severity severity--{{ issue.severity|lower|default:'info' }}">{{ issue.get_severity_display|default:'提示' }}</span></td>
+              <td class="mono">{{ issue.code|default:'—' }}</td>
+              <td>{{ issue.location|default:'—' }}</td>
+            <td>{{ issue.message|default:'—' }}{% if issue.severity == 'P1' %}<br><a href="{% url 'issue_explanation' issue.id %}">填写说明 / 管理确认</a>{% if issue.acknowledgement_note %}<p class="muted">{{ issue.acknowledgement_note }}</p>{% endif %}{% endif %}</td>
+              <td>{% if issue.acknowledged %}<span class="status status--approved">已确认</span>{% else %}<span class="status status--pending">待处理</span>{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="empty-state">暂无校验问题。若状态为「已校验」，可提交管理端复核。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}

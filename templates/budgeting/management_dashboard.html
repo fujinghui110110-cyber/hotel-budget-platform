@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}管理驾驶台 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}<span>管理端</span><span aria-hidden="true">/</span><span>管理驾驶台</span>{% endblock %}
+{% block content %}
+  <section class="page-heading page-heading--split">
+    <div>
+      <p class="eyebrow">管理控制台</p>
+      <h1>管理驾驶台</h1>
+      <p class="lede">周期：{% if cycle %}{{ cycle.name }}{% else %}暂无开放周期{% endif %}。已批准项目数据的合计与项目层对比，点击任一指标可穿透至项目明细。</p>
+    </div>
+    <div class="actions actions--end">
+      <a class="button button--ghost" href="{% url 'management_cycles' %}">预算周期</a>
+      <a class="button button--ghost" href="{% url 'management_projects' %}">项目进度与审批</a>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="kpi-title">
+    <div class="section-heading">
+      <div><p class="eyebrow">核心指标</p><h2 id="kpi-title">核心指标</h2></div>
+      <div class="report-link-grid">
+        {% for code, name in REPORTS.items %}
+          <a class="report-link {% if code == report_code %}is-active{% endif %}" href="{% url 'management_dashboard' %}?report={{ code }}"><span>{{ name }}</span></a>
+        {% endfor %}
+      </div>
+    </div>
+    {% if kpis %}
+      <div class="metric-grid">
+        {% for kpi in kpis %}
+          <a class="metric-card{% if kpi.kind == 'RATIO' %} metric-card--ratio{% endif %}" href="{% url 'management_report_drilldown' report_code %}?row_code={{ kpi.row_code|urlencode }}" title="穿透至「{{ kpi.label }}」项目明细">
+            <span class="summary-card__label">{{ kpi.label }}</span>
+            <strong class="metric-card__value">{{ kpi.display }}</strong>
+            <small>年度合计 · 点击穿透至项目层</small>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty-state">暂无已批准项目的汇总数据。待项目提交并经管理端批准后，此处将呈现合计指标。</p>
+    {% endif %}
+  </section>
+
+  <section class="panel" aria-labelledby="trend-title">
+    <div class="section-heading">
+      <div><p class="eyebrow">趋势分析</p><h2 id="trend-title">预算合理性</h2></div>
+      <a class="button button--secondary" href="{% url 'management_trend' %}?report_code={{ report_code }}">查看趋势分析</a>
+    </div>
+    <p class="lede">叠加近几年实际 / 预测与本次预算，判断预算设计是否合理；可切换指标，并穿透到单个项目看各自趋势。</p>
+  </section>
+
+  <section class="panel" aria-labelledby="matrix-title">
+    <div class="section-heading">
+      <div><p class="eyebrow">项目对比</p><h2 id="matrix-title">项目数据对比</h2></div>
+      <span class="badge">{{ approved_total }} / {{ project_total }} 项目已批准</span>
+    </div>
+    {% if kpis and projects %}
+      <div class="table-scroll">
+        <table>
+          <caption class="sr-only">各项目年度预算指标对比</caption>
+          <thead>
+            <tr>
+              <th scope="col">项目</th>
+              {% for kpi in kpis %}<th scope="col" class="num"><a class="text-link" href="{% url 'management_report_drilldown' report_code %}?row_code={{ kpi.row_code|urlencode }}">{{ kpi.label }}</a></th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for project in projects %}
+              <tr>
+                <th scope="row">{{ project.name|default:project.code }}</th>
+                {% for cell in project.cells %}<td class="num">{{ cell }}</td>{% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="empty-state">暂无已批准项目数据，无法对比。</p>
+    {% endif %}
+  </section>
+
+  <section class="panel" aria-labelledby="subtable-title">
+    <div class="section-heading">
+      <div><p class="eyebrow">分表汇总</p><h2 id="subtable-title">分表明细</h2></div>
+      <span class="badge">{{ sub_tables|length }} 张分表</span>
+    </div>
+    {% if sub_tables %}
+      <div class="report-link-grid report-link-grid--compact">
+        {% for table in sub_tables %}
+          <a class="report-link" href="{% url 'management_report' table.code %}"><strong>{{ table.name }}</strong><span>{{ table.rows }} 行</span></a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty-state">暂无分表数据。项目上传并经批准后，这里会列出各分表的汇总入口。</p>
+    {% endif %}
+  </section>
+{% endblock %}

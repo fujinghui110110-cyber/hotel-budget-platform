@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% load budget_tags %}
+{% block title %}调整任务 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}{% url 'project_dashboard' as project_dashboard_url %}<a href="{{ project_dashboard_url }}">项目工作台</a><span aria-hidden="true">/</span><span>调整任务</span>{% endblock %}
+{% block content %}
+  {% url 'project_upload_new' as upload_new_url %}
+  <section class="page-heading page-heading--split">
+    <div>
+      <p class="eyebrow">调整任务</p>
+      <h1>调整任务</h1>
+      <p class="lede">管理端下发的业务指标目标会在这里显示：请按目标调整明细表后重新上传预算套表，对齐后自动确认。</p>
+    </div>
+    <div class="actions actions--end">
+      {% if upload_new_url %}<a class="button button--primary" href="{{ upload_new_url }}">重新上传预算</a>{% endif %}
+    </div>
+  </section>
+
+  {% if batches %}
+    {% for batch in batches %}
+      {% with line=batch.lines.all.0 %}
+      <section class="panel" aria-labelledby="batch-{{ batch.pk }}">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">调整批次</p>
+            {% if batch.cascade.kind == 'fixed_cost_scenario' %}
+            <h2 id="batch-{{ batch.pk }}">固定成本场景 · 四表修订目标</h2>
+            {% elif batch.cascade.kind == 'full' %}
+            <h2 id="batch-{{ batch.pk }}">全表调整：{{ batch.report_code|report_name }}</h2>
+            {% elif batch.driver_label %}
+            <h2 id="batch-{{ batch.pk }}">{{ batch.driver_label }}：{{ batch.from_value|driver_value:batch.driver }} → {{ batch.to_value|driver_value:batch.driver }}</h2>
+            {% else %}
+            <h2 id="batch-{{ batch.pk }}">{{ batch.reason|default:'项目级调整' }}</h2>
+            {% endif %}
+          </div>
+          <span class="status status--{{ batch.status|lower|default:'pending' }}">{{ batch.get_status_display }}</span>
+        </div>
+
+        {% if batch.reason %}<p class="muted">{{ batch.reason }}</p>{% endif %}
+        {% if batch.due_date %}<p class="muted">期限：{{ batch.due_date }}</p>{% endif %}
+
+      {% if batch.cascade.kind == 'fixed_cost_scenario' %}
+      <p>全年客房收入目标 {{ batch.target_room_rev_cents|yuan }} 元 · 经济差额 {{ batch.delta_cents|yuan }} 元。成本费用绝对额保持不变；四表是同一经济变动的独立目标，不可再次相加。</p>
+      <div class="table-card table-scroll">
+        <table class="data-table">
+          <caption class="sr-only">四表逐月修订目标</caption>
+          <thead><tr><th>报表 / 指标</th><th>期间</th><th>基线（元）</th><th>目标（元）</th><th>最新值（元）</th><th>差异（元）</th><th>状态</th></tr></thead>
+          <tbody>{% for target in batch.lines.all %}<tr>
+            <th scope="row">{{ target.report_code|report_name }}<br>{{ target.row_code }}</th><td>{{ target.period }}</td>
+            <td class="num">{{ target.baseline_cents|yuan }}</td><td class="num">{{ target.target_cents|yuan }}</td>
+            <td class="num">{% if target.latest_value_cents is not None %}{{ target.latest_value_cents|yuan }}{% else %}—{% endif %}</td>
+            <td class="num">{% if target.difference_cents is not None %}{{ target.difference_cents|yuan }}{% else %}—{% endif %}</td>
+            <td>{{ target.get_status_display }}</td>
+          </tr>{% endfor %}</tbody>
+        </table>
+      </div>
+      <p class="muted">请修订完整工作簿并重传。所有目标逐分一致且管理端批准后，才更新正式预算并确认任务。</p>
+      {% elif batch.cascade.kind == 'full' %}
+        <div class="detail-grid">
+          {% if line %}<div><dt>已上传行数</dt><dd class="num">{{ batch.lines.all|length }}</dd></div>{% endif %}
+          {% if line %}<div><dt>对目标状态</dt><dd><span class="status status--{{ line.status|lower|default:'pending' }}">{{ line.get_status_display }}</span></dd></div>{% endif %}
+        </div>
+
+        {% if batch.cascade.edited %}
+        <h3>调整明细</h3>
+        <div class="table-scroll">
+          <table>
+            <caption class="sr-only">调整明细</caption>
+            <thead><tr><th scope="col">指标</th><th scope="col">单位</th><th scope="col">期间</th><th scope="col" class="num">调整前</th><th scope="col" class="num">调整后</th></tr></thead>
+            <tbody>
+              {% for e in batch.cascade.edited %}
+              <tr class="is-emphasis">
+                <th scope="row">{{ e.1 }}</th>
+                <td class="muted">{% if e.2 == 'MONEY' %}万元{% elif e.2 == 'YUAN' %}元{% elif e.2 == 'RATIO' %}%{% else %}间{% endif %}</td>
+                <td class="muted">{% if e.3 == 'YEAR' %}年度{% else %}{{ e.3|add:0 }}月{% endif %}</td>
+                <td class="num">{{ e.4|cascade:e.2 }}</td>
+                <td class="num">{{ e.5|cascade:e.2 }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+
+        <h3>全盘影响（年度）</h3>
+        <div class="table-scroll">
+          <table class="cascade-table">
+            <caption class="sr-only">全盘联动影响</caption>
+            <thead><tr><th scope="col">指标</th><th scope="col">单位</th><th scope="col" class="num">调整前</th><th scope="col" class="num">调整后</th></tr></thead>
+            <tbody>
+              {% for row in batch.cascade.rows %}
+              <tr {% if row.3 != row.4 %}class="is-emphasis"{% endif %}>
+                <th scope="row">{{ row.1 }}</th>
+                <td class="muted">{% if row.2 == 'MONEY' %}万元{% elif row.2 == 'YUAN' %}元{% elif row.2 == 'RATIO' %}%{% else %}间{% endif %}</td>
+                <td class="num">{{ row.3|cascade:row.2 }}</td>
+                <td class="num">{{ row.4|cascade:row.2 }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        {% elif batch.driver_label %}
+        <div class="detail-grid">
+          <div><dt>目标客房收入</dt><dd class="num">{{ batch.target_room_rev_cents|cascade:'MONEY' }} 万元</dd></div>
+          <div><dt>客房收入变动</dt><dd class="num">{{ batch.cascade.delta_room_rev|cascade:'MONEY' }} 万元</dd></div>
+          {% if line %}<div><dt>最新上传</dt><dd class="num">{% if line.latest_value_cents != None %}{{ line.latest_value_cents|cascade:'MONEY' }} 万元{% else %}—{% endif %}</dd></div>{% endif %}
+          {% if line %}<div><dt>对目标状态</dt><dd><span class="status status--{{ line.status|lower|default:'pending' }}">{{ line.get_status_display }}</span></dd></div>{% endif %}
+        </div>
+
+        <div class="table-scroll">
+          <table class="cascade-table">
+            <caption class="sr-only">调整目标联动测算</caption>
+            <thead><tr><th scope="col">指标</th><th scope="col">单位</th><th scope="col" class="num">调整前</th><th scope="col" class="num">调整后</th></tr></thead>
+            <tbody>
+              {% for row in batch.cascade.rows %}
+              <tr {% if row.0 == 'ROOM_REV' or row.0 == 'NET' %}class="is-emphasis"{% endif %}>
+                <th scope="row">{{ row.1 }}</th>
+                <td class="muted">{% if row.2 == 'MONEY' %}万元{% elif row.2 == 'YUAN' %}元{% elif row.2 == 'RATIO' %}%{% else %}间{% endif %}</td>
+                <td class="num">{{ row.3|cascade:row.2 }}</td>
+                <td class="num">{{ row.4|cascade:row.2 }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="table-scroll">
+          <table>
+            <caption class="sr-only">调整批次项目明细</caption>
+            <thead><tr><th scope="col">基线</th><th scope="col">目标值</th><th scope="col">最新值</th><th scope="col">差异</th><th scope="col">状态</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="num">{{ line.baseline_cents|yuan }}</td>
+                <td class="num">{{ line.target_cents|yuan }}</td>
+                <td class="num">{{ line.latest_value_cents|yuan }}</td>
+                <td class="num">{{ line.difference_cents|yuan }}</td>
+                <td><span class="status status--{{ line.status|lower|default:'pending' }}">{{ line.get_status_display }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+      </section>
+      {% endwith %}
+    {% endfor %}
+  {% else %}
+    <section class="panel empty-state">
+      <h2>当前没有调整任务</h2>
+      <p class="muted">管理端下发调整后，需要你确认的事项会显示在这里。</p>
+    </section>
+  {% endif %}
+{% endblock %}

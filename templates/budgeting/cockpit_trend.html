@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}趋势分析 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}<span>管理端</span><span aria-hidden="true">/</span><span>趋势分析</span>{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'budgeting/cockpit.css' %}">
+<section class="cockpit-heading">
+  <div><p class="eyebrow">预算合理性</p><h1>趋势分析</h1><p class="lede">滚动窗口：B-3、B-2 实际；B-1 预测；B 预算。</p></div>
+  <div class="cockpit-actions">
+    <a class="button button--ghost" href="{% url 'cockpit_export' %}?metric={{ metric_code|urlencode }}&amp;report_code={{ report_code|urlencode }}&amp;project_id={{ selected_project_id|default_if_none:'' }}&amp;display_unit={{ display_unit|urlencode }}">导出 CSV</a>
+    <a class="button button--ghost" href="{% url 'cockpit_drilldown' %}?metric={{ metric_code|urlencode }}&amp;report_code={{ report_code|urlencode }}&amp;project_id={{ selected_project_id|default_if_none:'' }}">项目穿透</a>
+  </div>
+</section>
+<section class="cockpit-panel panel">
+  <form method="get" class="cockpit-filter cockpit-filter--wide">
+    <label for="trend-report">报表</label>
+    <select id="trend-report" name="report_code">
+      {% for code,name in REPORTS.items %}<option value="{{ code }}" {% if code == report_code %}selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select>
+    <label for="trend-metric">指标</label>
+    <select id="trend-metric" name="metric">
+      {% for item in metric_choices %}<option value="{{ item.code }}" {% if item.code == metric_code %}selected{% endif %}>{{ item.label }}{% if not item.available %}（暂无映射）{% endif %}</option>{% endfor %}
+    </select>
+    <label for="trend-project">项目</label>
+    <select id="trend-project" name="project_id">
+      <option value="">全部项目</option>
+      {% for project in project_choices %}<option value="{{ project.id }}" {% if project.id == selected_project_id %}selected{% endif %}>{{ project.code }} {{ project.name }}</option>{% endfor %}
+    </select>
+    {% if display_unit_options %}
+      <label for="trend-display-unit">金额单位</label>
+      <select id="trend-display-unit" name="display_unit">
+        {% for item in display_unit_options %}<option value="{{ item.value }}" {% if item.value == display_unit %}selected{% endif %}>{{ item.label }}</option>{% endfor %}
+      </select>
+    {% else %}
+      <span class="cockpit-muted">单位：{{ trend.unit_label }}</span>
+    {% endif %}
+    <button class="button button--secondary" type="submit">刷新</button>
+  </form>
+</section>
+<section class="cockpit-panel panel" aria-labelledby="trend-title">
+  <div class="cockpit-section-head"><h2 id="trend-title">{{ trend.metric_label }} · 12 个月</h2><span class="cockpit-muted">覆盖：{{ trend.coverage.included }} / {{ trend.coverage.active }} 个项目{% if trend.unit_label %} · {{ trend.unit_label }}{% endif %}</span></div>
+  <div id="cockpit-trend-chart" class="cockpit-chart" role="img" aria-label="{{ trend.metric_label }}月度趋势图" data-url="{{ data_url }}" data-report="{{ report_code }}" data-metric="{{ metric_code }}" data-project="{{ selected_project_id|default_if_none:'' }}" data-display-unit="{{ display_unit }}">{% if not trend.series %}<p class="cockpit-empty">暂无可展示的趋势数据。</p>{% endif %}</div>
+</section>
+<section class="cockpit-panel panel" aria-labelledby="annual-chart-title">
+  <div class="cockpit-section-head"><h2 id="annual-chart-title">年度柱状对比</h2><span class="cockpit-muted">仅年度历史会明确标注。</span></div>
+  <div id="cockpit-annual-chart" class="cockpit-chart cockpit-chart--short" role="img" aria-label="{{ trend.metric_label }}年度对比图"></div>
+</section>
+<section class="cockpit-panel panel" aria-labelledby="monthly-table-title">
+  <div class="cockpit-section-head"><h2 id="monthly-table-title">月度明细</h2><span id="monthly-table-note" class="cockpit-muted">图表下方提供键盘可达的完整数据；点击任一数值可进入项目穿透。</span></div>
+  <div class="cockpit-table-wrap table-card table-scroll">
+    <table class="cockpit-table data-table cockpit-trend-monthly-table" aria-describedby="monthly-table-note">
+      <caption class="cockpit-visually-hidden">{{ trend.metric_label }}月度明细</caption>
+      <thead><tr><th scope="col">年度</th><th scope="col">口径</th>{% for month in trend.months %}<th scope="col">{{ month }}月</th>{% endfor %}<th scope="col">年度</th></tr></thead>
+      <tbody>
+        {% for item in trend.series %}
+          <tr>
+            <th scope="row">{{ item.label }}</th>
+            <td>{{ item.kind_label }}</td>
+            {% for value in item.display_values %}<td><a class="cockpit-cell-link" href="{% url 'cockpit_drilldown' %}?metric={{ metric_code|urlencode }}&amp;report_code={{ report_code|urlencode }}&amp;project_id={{ selected_project_id|default_if_none:'' }}&amp;year={{ item.year }}&amp;kind={{ item.kind }}&amp;month={{ forloop.counter }}" aria-label="{{ item.label }} {{ forloop.counter }}月：{{ value }}，查看项目穿透">{{ value }}</a></td>{% endfor %}
+            <td><a class="cockpit-cell-link" href="{% url 'cockpit_drilldown' %}?metric={{ metric_code|urlencode }}&amp;report_code={{ report_code|urlencode }}&amp;project_id={{ selected_project_id|default_if_none:'' }}&amp;year={{ item.year }}&amp;kind={{ item.kind }}" aria-label="{{ item.label }}年度：{{ item.annual_display }}，查看项目穿透">{{ item.annual_display }}</a></td>
+          </tr>
+        {% empty %}<tr><td colspan="15">暂无数据</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<section class="cockpit-panel panel" aria-labelledby="annual-table-title">
+  <div class="cockpit-section-head"><h2 id="annual-table-title">年度对比</h2><span id="annual-table-note" class="cockpit-muted">缺失值保持为空，不按 0 计入；点击年度值可进入项目穿透。</span></div>
+  <div class="cockpit-table-wrap table-card table-scroll">
+    <table class="cockpit-table data-table" aria-describedby="annual-table-note">
+      <caption class="cockpit-visually-hidden">{{ trend.metric_label }}年度对比</caption>
+      <thead><tr><th scope="col">年度</th><th scope="col">值</th><th scope="col">覆盖</th><th scope="col">来源</th></tr></thead>
+      <tbody>
+        {% for item in trend.annual %}
+          <tr><th scope="row">{{ item.label }}</th><td><a class="cockpit-cell-link" href="{% url 'cockpit_drilldown' %}?metric={{ metric_code|urlencode }}&amp;report_code={{ report_code|urlencode }}&amp;project_id={{ selected_project_id|default_if_none:'' }}&amp;year={{ item.year }}&amp;kind={{ item.kind }}" aria-label="{{ item.label }}：{{ item.display }}，查看项目穿透">{{ item.display }}</a></td><td>{{ item.included_projects }} / {{ item.active_projects }}</td><td>{% if item.annual_only %}仅年度历史{% else %}年度或完整月度滚动{% endif %}</td></tr>
+        {% empty %}<tr><td colspan="4">暂无数据</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{ trend|json_script:"cockpit-trend-data" }}
+<script src="{% static 'vendor/echarts.min.js' %}" defer></script><script src="{% static 'budgeting/cockpit.js' %}" defer></script>
+{% endblock %}

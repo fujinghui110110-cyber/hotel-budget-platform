@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}问题跟进 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}<span>问题跟进</span>{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'budgeting/cockpit.css' %}">
+<section class="cockpit-heading"><div><p class="eyebrow">审核问答</p><h1>问题跟进</h1><p class="lede">问题绑定具体指标与版本，保留提问时的数据快照。</p></div>{% if is_admin %}<a class="button button--secondary" href="{% url 'cockpit_question_new' %}">新建问题</a>{% endif %}</section>
+<section class="cockpit-panel panel"><form method="get" class="cockpit-filter"><label for="question-status">状态</label><select id="question-status" name="status"><option value="">全部</option><option value="OPEN" {% if status == "OPEN" %}selected{% endif %}>待回复</option><option value="ANSWERED" {% if status == "ANSWERED" %}selected{% endif %}>已回复</option><option value="CLOSED" {% if status == "CLOSED" %}selected{% endif %}>已关闭</option></select><button class="button button--ghost" type="submit">筛选</button></form><div class="cockpit-table-wrap table-card table-scroll"><table class="cockpit-table data-table"><thead><tr><th>问题</th><th>项目</th><th>期间</th><th>状态</th><th>创建时间</th></tr></thead><tbody>{% for item in questions %}<tr><th><a href="{% url 'cockpit_question' item.id %}">{{ item.body|truncatechars:60 }}</a></th><td>{{ item.upload.project.code }}</td><td>{{ item.period }}</td><td>{{ item.get_status_display }}</td><td>{{ item.created_at|date:"Y-m-d H:i" }}</td></tr>{% empty %}<tr><td colspan="5" class="cockpit-empty">暂无问题。</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

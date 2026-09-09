@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}趋势分析 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}
+  <a href="{% url 'management_dashboard' %}">管理驾驶台</a><span aria-hidden="true">/</span>
+  <span>趋势分析</span>
+{% endblock %}
+{% block content %}
+  <section class="page-heading page-heading--split">
+    <div>
+      <p class="eyebrow">预算合理性</p>
+      <h1>趋势分析</h1>
+      <p class="lede">近几年实际 / 预测与本次预算叠加对比，判断预算设计是否合理；可穿透到单个项目看各自趋势。</p>
+    </div>
+    <div class="actions actions--end">
+      <a class="button button--ghost" href="{% url 'management_dashboard' %}">返回驾驶台</a>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="趋势筛选">
+    <form method="get" class="trend-controls">
+      <div class="field">
+        <label for="report_code">报表</label>
+        <select name="report_code" id="report_code" onchange="this.form.submit()">
+          {% for code, name in REPORTS.items %}
+            <option value="{{ code }}" {% if code == report_code %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="row_code">指标</label>
+        <select name="row_code" id="row_code" onchange="this.form.submit()">
+          {% for opt in options %}
+            <option value="{{ opt.code }}" {% if opt.code == row_code %}selected{% endif %}>{{ opt.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <input type="hidden" name="view" value="{{ view_mode }}">
+      <div class="field">
+        <span class="field__label">视角</span>
+        <div class="segmented">
+          <a class="{% if view_mode == 'company' %}is-active{% endif %}" href="?report_code={{ report_code|urlencode }}&amp;row_code={{ row_code|urlencode }}&amp;view=company">公司合计</a>
+          <a class="{% if view_mode == 'project' %}is-active{% endif %}" href="?report_code={{ report_code|urlencode }}&amp;row_code={{ row_code|urlencode }}&amp;view=project">按项目</a>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  {% if annual_svg %}
+  <section class="panel" aria-labelledby="annual-title">
+    <div class="section-heading">
+      <div><p class="eyebrow">年度趋势</p><h2 id="annual-title">{{ selected_label }} · 年度对比</h2></div>
+      <span class="badge">单位：{{ unit_label }}</span>
+    </div>
+    {% if annual_series|length > 1 %}
+      <div class="trend-legend">
+        {% for s in annual_series %}<span class="legend-item"><i style="background:{{ s.color }}"></i>{{ s.name }}</span>{% endfor %}
+      </div>
+    {% endif %}
+    <div class="trend-chart">{{ annual_svg|safe }}</div>
+  </section>
+  {% endif %}
+
+  {% if monthly_svg %}
+  <section class="panel" aria-labelledby="monthly-title">
+    <div class="section-heading">
+      <div><p class="eyebrow">预算月度曲线</p><h2 id="monthly-title">{{ selected_label }} · {{ budget_year }} 预算 12 个月</h2></div>
+      <span class="badge">单位：{{ unit_label }}</span>
+    </div>
+    {% if monthly_series|length > 1 %}
+      <div class="trend-legend">
+        {% for s in monthly_series %}<span class="legend-item"><i style="background:{{ s.color }}"></i>{{ s.name }}</span>{% endfor %}
+      </div>
+    {% endif %}
+    <div class="trend-chart">{{ monthly_svg|safe }}</div>
+  </section>
+  {% endif %}
+
+  {% if not annual_svg and not monthly_svg %}
+    <section class="panel"><p class="empty-state">当前报表暂无可展示的趋势数据。待项目提交并经批准后，此处将呈现近几年实际 / 预测与本次预算的叠加对比。</p></section>
+  {% endif %}
+{% endblock %}

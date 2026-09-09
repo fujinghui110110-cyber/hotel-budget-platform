@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}上传预算套表 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}
+  {% url 'project_dashboard' as project_dashboard_url %}
+  {% if project_dashboard_url %}<a href="{{ project_dashboard_url }}">项目工作台</a><span aria-hidden="true">/</span>{% endif %}
+  <span>上传预算套表</span>
+{% endblock %}
+{% block content %}
+  {% url 'project_dashboard' as project_dashboard_url %}
+  <section class="page-heading">
+    <p class="eyebrow">上传套表</p>
+    <h1>上传预算套表</h1>
+    <p class="lede">当前周期：{% if current_cycle %}{{ current_cycle.name|default:'暂无开放周期' }}{% elif project_cycle %}{{ project_cycle.name|default:'暂无开放周期' }}{% elif cycle %}{{ cycle.name|default:'暂无开放周期' }}{% else %}暂无开放周期{% endif %}。上传后系统会保存原文件并开始校验。</p>
+  </section>
+  <section class="panel narrow-panel" aria-labelledby="upload-form-title">
+    <h2 id="upload-form-title">选择 Excel 文件</h2>
+    <form method="post" enctype="multipart/form-data" class="form-stack">
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="form-errors" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+      {% if form %}
+        {{ form.as_p }}
+      {% else %}
+        <p><label for="id_file">预算套表（.xlsx）</label><input id="id_file" name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required><small class="field-help">最大 50 MiB。</small></p>
+      {% endif %}
+      <div class="actions">
+        <button class="button button--primary" type="submit">上传并开始校验</button>
+        {% if project_dashboard_url %}<a class="button button--ghost" href="{{ project_dashboard_url }}">取消</a>{% endif %}
+      </div>
+    </form>
+  </section>
+  <section class="panel panel--muted" aria-labelledby="upload-note-title">
+    <h2 id="upload-note-title">请先确认</h2>
+    <ul class="check-list">
+      <li>文件格式为 <code>.xlsx</code>，并且来自当前发布的统一模板。</li>
+      <li>不要覆盖旧版本；每次上传都会建立可追溯的版本记录。</li>
+      <li>上传完成不等于提交或批准，请在详情页确认校验状态。</li>
+    </ul>
+  </section>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>上传预算套表</h1>
+<p>当前周期：{{ cycle.name|default:"暂无开放周期" }}</p>
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">上传并进入校验队列</button>
+</form>
+{% endblock %}

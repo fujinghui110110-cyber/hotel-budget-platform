@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}页面不存在 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}<span>页面不存在</span>{% endblock %}
+{% block content %}
+  {% url 'project_dashboard' as project_dashboard_url %}
+  {% url 'management_projects' as management_projects_url %}
+  <section class="error-page" aria-labelledby="error-title"><p class="error-page__code">404</p><p class="eyebrow">PAGE NOT FOUND</p><h1 id="error-title">链接可能已经失效</h1><p class="lede">页面已被移动，或者当前地址不再提供服务。</p><div class="actions">{% if user.is_authenticated and user.is_admin_role and management_projects_url %}<a class="button button--primary" href="{{ management_projects_url }}">返回管理端</a>{% elif user.is_authenticated and project_dashboard_url %}<a class="button button--primary" href="{{ project_dashboard_url }}">返回项目工作台</a>{% else %}<a class="button button--primary" href="/login/">返回登录</a>{% endif %}</div></section>
+{% endblock %}

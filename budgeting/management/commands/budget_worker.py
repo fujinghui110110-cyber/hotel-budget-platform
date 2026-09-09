@@ -1,0 +1,91 @@
+import time
+from datetime import timedelta
+
+from django.core.management.base import BaseCommand
+from django.db.models import F
+from django.utils import timezone
+
+from budgeting.models import ProcessingJob, UploadVersion
+from budgeting.services.workflow import InfrastructureProcessingError, process_upload
+
+
+class Command(BaseCommand):
+    help = "Run the single-concurrency local budget worker."
+
+    def add_arguments(self, parser):
+        parser.add_argument("--once", action="store_true")
+        parser.add_argument("--sleep", type=float, default=2)
+        parser.add_argument("--lease-seconds", type=int, default=240)
+
+    def handle(self, *args, **options):
+        while True:
+            job = self._claim_job(options["lease_seconds"])
+            if job:
+                self._run_job(job)
+            elif options["once"]:
+                return
+            else:
+                time.sleep(options["sleep"])
+
+    def _claim_job(self, lease_seconds):
+        now = timezone.now()
+        expired = ProcessingJob.objects.filter(
+            status=ProcessingJob.Status.RUNNING,
+            lease_until__lt=now,
+        )
+        expired.update(status=ProcessingJob.Status.QUEUED, lease_until=None)
+
+        job = (
+            ProcessingJob.objects
+            .filter(status=ProcessingJob.Status.QUEUED)
+            .order_by("created_at")
+            .first()
+        )
+        if not job:
+            return None
+        claimed = ProcessingJob.objects.filter(
+            pk=job.pk,
+            status=ProcessingJob.Status.QUEUED,
+        ).update(
+            status=ProcessingJob.Status.RUNNING,
+            attempts=F("attempts") + 1,
+            lease_until=now + timedelta(seconds=lease_seconds),
+            heartbeat_at=now,
+        )
+        if not claimed:
+            return None
+        job.refresh_from_db()
+        return job
+
+    def _run_job(self, job):
+        job = ProcessingJob.objects.get(pk=job.pk)
+        if job.status != ProcessingJob.Status.RUNNING:
+            return job
+        upload = job.upload
+        upload.status = UploadVersion.Status.PROCESSING
+        upload.save(update_fields=["status"])
+        try:
+            process_upload(upload)
+        except InfrastructureProcessingError as exc:
+            if job.attempts < 2:
+                job.status = ProcessingJob.Status.QUEUED
+                job.error = str(exc)
+            else:
+                upload.status = UploadVersion.Status.REJECTED
+                upload.note = str(exc)
+                upload.save(update_fields=["status", "note"])
+                job.status = ProcessingJob.Status.FAILED
+                job.error = str(exc)
+        except Exception as exc:
+            upload.status = UploadVersion.Status.REJECTED
+            upload.note = str(exc)
+            upload.save(update_fields=["status", "note"])
+            job.status = ProcessingJob.Status.FAILED
+            job.error = str(exc)
+        else:
+            job.status = ProcessingJob.Status.DONE
+            job.error = ""
+        job.lease_until = None
+        job.heartbeat_at = timezone.now()
+        job.save(update_fields=["status", "error", "lease_until", "heartbeat_at"])
+        return job

@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}无权访问 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}<span>访问受限</span>{% endblock %}
+{% block content %}
+  {% url 'project_dashboard' as project_dashboard_url %}
+  {% url 'management_projects' as management_projects_url %}
+  <section class="error-page" aria-labelledby="error-title"><p class="error-page__code">403</p><p class="eyebrow">ACCESS RESTRICTED</p><h1 id="error-title">当前账号无权访问</h1><p class="lede">请确认登录的是正确的项目账号。如需访问管理端，请联系预算管理员。</p><div class="actions">{% if user.is_authenticated and user.is_admin_role and management_projects_url %}<a class="button button--primary" href="{{ management_projects_url }}">返回管理端</a>{% elif user.is_authenticated and project_dashboard_url %}<a class="button button--primary" href="{{ project_dashboard_url }}">返回项目工作台</a>{% else %}<a class="button button--primary" href="/login/">返回登录</a>{% endif %}</div></section>
+{% endblock %}

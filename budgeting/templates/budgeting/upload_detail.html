@@ -1,0 +1,9 @@
+{% extends "budgeting/base.html" %}
+{% block content %}
+<section class="panel">
+  <h1>{{ upload.original_name }}</h1>
+  <p>状态：<strong>{{ upload.status }}</strong> SHA-256：{{ upload.sha256 }}</p>
+  {% if upload.status == "VALIDATED" %}<form method="post" action="/project/uploads/{{ upload.id }}/submit">{% csrf_token %}<button class="primary">提交管理端审批</button></form>{% endif %}
+</section>
+<section class="panel"><h2>校验问题</h2><table><tr><th>级别</th><th>代码</th><th>位置</th><th>说明</th></tr>{% for i in issues %}<tr><td>{{ i.severity }}</td><td>{{ i.code }}</td><td>{{ i.sheet }} {{ i.cell }}</td><td>{{ i.message }}</td></tr>{% empty %}<tr><td colspan="4">暂无问题</td></tr>{% endfor %}</table></section>
+{% endblock %}

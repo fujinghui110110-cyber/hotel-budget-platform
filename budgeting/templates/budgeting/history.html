@@ -1,0 +1,2 @@
+{% extends "budgeting/base.html" %}
+{% block content %}<h1>历史版本</h1><section class="panel"><table><tr><th>时间</th><th>文件</th><th>状态</th><th>SHA-256</th></tr>{% for u in uploads %}<tr><td>{{ u.created_at }}</td><td>{{ u.original_name }}</td><td>{{ u.status }}</td><td>{{ u.sha256 }}</td></tr>{% endfor %}</table></section>{% endblock %}

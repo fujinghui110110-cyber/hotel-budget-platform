@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}指标穿透 · 酒店预算与损益管理平台{% endblock %}
+{% block breadcrumb %}<span>管理端</span><span aria-hidden="true">/</span><span>指标穿透</span>{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'budgeting/cockpit.css' %}">
+<section class="cockpit-heading"><div><p class="eyebrow">项目明细</p><h1>{{ metric_label }} · {{ drilldown.period_label }}</h1><p class="lede">{{ report_code }} · 只读穿透{% if display_unit == "wan" %} · 金额单位：万元{% elif display_unit == "yuan" %} · 金额单位：元{% endif %} · 覆盖 {{ drilldown.coverage.included }} / {{ drilldown.coverage.active }}</p></div><a class="button button--ghost" href="{% url 'cockpit_trend' %}?metric={{ metric_code|urlencode }}&amp;report_code={{ report_code|urlencode }}&amp;project_id={{ project_id|default_if_none:'' }}&amp;display_unit={{ display_unit|urlencode }}">返回趋势</a></section>
+
+<section class="cockpit-panel">
+  <div class="table-card">
+    <div class="table-scroll">
+      <table class="data-table data-table--financial cockpit-drilldown-table">
+        <caption class="sr-only">{{ drilldown.period_label }}项目贡献及来源</caption>
+        <colgroup>
+          <col class="cockpit-drilldown-col-project">
+          <col class="cockpit-drilldown-col-contribution">
+          <col class="cockpit-drilldown-col-version">
+          <col class="cockpit-drilldown-col-source">
+        </colgroup>
+        <thead><tr><th scope="col">项目</th><th scope="col">本期贡献</th><th scope="col">当前版本</th><th scope="col">来源与提问</th></tr></thead>
+        <tbody>
+          {% for item in rows %}
+            <tr>
+              <th scope="row"><a href="{% url 'cockpit_project' item.project_id %}?report_code={{ report_code|urlencode }}">{{ item.project_code }} {{ item.project_name }}</a></th>
+              <td class="align-right cockpit-contribution"><strong class="cockpit-amount">{{ item.display }}</strong><span class="cockpit-muted cockpit-contribution-status">{{ item.status }}</span></td>
+              <td class="cockpit-version">
+                <span class="cockpit-version-name" title="{{ item.upload_id }}">{{ item.upload_name }}</span>
+                {% if item.upload_created_at %}<time class="cockpit-version-time" datetime="{{ item.upload_created_at }}">{{ item.upload_created_at|slice:":10" }} {{ item.upload_created_at|slice:"11:16" }}</time>{% else %}<span class="cockpit-version-time">—</span>{% endif %}
+              </td>
+              <td class="cockpit-source-cell">
+                {% if item.sources %}
+                  <details>
+                    <summary>{{ item.sources|length }} 个源单元格</summary>
+                    <div class="cockpit-source-list">
+                      {% for source in item.sources %}
+              <div class="cockpit-source">
+                <span class="cockpit-source-label"><strong>{{ source.row_label }}</strong>（{{ source.row_code }}）</span>
+                <span class="cockpit-source-cell-ref">{{ source.source_sheet }}!{{ source.source_cell }}</span>
+                          <span class="cockpit-source-formula">{{ source.source_formula|default:"无公式" }}</span>
+                          <span class="cockpit-source-value"><strong class="cockpit-source-amount">{{ source.display }}</strong>{% if source.value_raw %}<small class="cockpit-source-raw">（原始 {{ source.value_raw }}）</small>{% endif %}</span>
+                          <a class="cockpit-cell-link" href="{% url 'cockpit_question_new' %}?value_id={{ source.value_id }}&amp;cycle={{ cycle.id }}">提问</a>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </details>
+                {% else %}<span class="cockpit-muted">无匹配源单元格</span>{% endif %}
+              </td>
+            </tr>
+          {% empty %}<tr><td colspan="4">暂无已批准项目数据。</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}
