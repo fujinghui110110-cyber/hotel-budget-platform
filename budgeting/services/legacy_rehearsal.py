@@ -41,8 +41,6 @@ def _value(upload, code, row_code, label, period, year, kind, cell, unit):
     number = _number(cell)
     if number is None:
         return None
-    if unit == 'COUNT' and number != number.to_integral_value():
-        return None
     base = dict(upload=upload, report_code=code, row_code=row_code, row_label=label[:240], period=period,
                 data_year=year, data_kind=kind, month=int(period) if re.fullmatch(r'\d{2}', period) else None,
                 source_sheet=cell['_sheet'], source_cell=cell['coordinate'], source_formula=cell.get('formula') or '', unit=unit)

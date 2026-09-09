@@ -11,7 +11,7 @@ from budgeting.models import NormalizedValue, REPORTS
 from budgeting.services.legacy_rehearsal import _columns, _key, _number, _row_matches
 from budgeting.services.workbook_reference import WorkbookReferenceError, read_workbook
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 REASONS = {
     'REPORT_MISSING': '未找到汇总报表',
     'REPORT_EMPTY': '汇总报表没有数据',
@@ -106,16 +106,15 @@ def build_upload_audit(upload, *, refresh=False):
             mapping = list(report.get('mapping', []))
             existing = {(m['row_code'], m.get('period')) for m in mapping}
             mapping.extend(m for m in live_report.get('mapping', []) if (m['row_code'], m.get('period')) not in existing)
-            if sheet and report_code in base.get('reports', {}):
+            if not sheet:
+                issues.append(_issue('REPORT_MISSING', report_code, sheet=sheet_name, detail=f'未找到汇总报表“{sheet_name}”，该表不再进行科目、期间或单元格检查。'))
+                continue
+            if report_code in base.get('reports', {}):
                 for year, kind, title in [(upload.cycle.budget_year-3, 'ACTUAL', '实际'), (upload.cycle.budget_year-2, 'ACTUAL', '实际'), (upload.cycle.budget_year-1, 'FORECAST', '预测')]:
                     if (report_code, year, kind) not in dimensions:
                         issues.append(_issue('PERIOD_MISSING', report_code, period=f'{year}{title}', sheet=sheet_name, detail=f'系统未读取到{year}年{title}数据；请核对原表是否包含该年度及实际/预测标识，不能用其他期间替代。'))
             if not mapping:
                 issues.append(_issue('MAPPING_MISSING', report_code, sheet=sheet_name, detail='该报表没有可用科目映射。'))
-                continue
-            if not sheet:
-                expected += len(mapping)
-                issues.append(_issue('REPORT_MISSING', report_code, sheet=sheet_name, detail=f'没有找到汇总报表“{sheet_name}”，{len(mapping)}个期望数据项无法读取。'))
                 continue
             cells = sheet.get('cells', []) if sheet else []
             by_coord = {c['coordinate']: c for c in cells}
@@ -172,8 +171,6 @@ def build_upload_audit(upload, *, refresh=False):
                         reason = 'CELL_EMPTY'
                     elif _number(cell) is None:
                         reason = 'NON_NUMERIC'
-                    elif item.get('unit') == 'COUNT' and _number(cell) != _number(cell).to_integral_value():
-                        reason = 'COUNT_NON_INTEGER'
                     else:
                         reason = 'NORMALIZED_MISSING'
                 detail = REASONS[reason]

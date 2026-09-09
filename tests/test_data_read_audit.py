@@ -49,7 +49,8 @@ class DataReadAuditTests(TestCase):
         missing = self.audit(sheets=[])
         self.assertEqual(missing['issues'][0]['reason_code'], 'REPORT_MISSING')
         self.assertEqual(len(missing['issues']), 1)
-        self.assertEqual(missing['summary']['missing_cells'], 4)
+        self.assertEqual(missing['summary']['missing_cells'], 0)
+        self.assertEqual(missing['summary']['expected_cells'], 0)
         self.assertEqual(self.audit()['issues'][0]['reason_code'], 'REPORT_EMPTY')
 
     def test_cache_reused_and_invalidated_after_normalization(self):
@@ -78,3 +79,10 @@ class DataReadAuditTests(TestCase):
             result = build_upload_audit(self.upload, refresh=True)
         periods = {i['period'] for i in result['issues'] if i['reason_code'] == 'PERIOD_MISSING'}
         self.assertEqual(periods, {'2024实际', '2025实际', '2026预测'})
+
+    def test_missing_sheet_without_mapping_has_only_one_notice(self):
+        self.manifest.write_text(json.dumps({'reports': {'PL_TOTAL_WINE': {'sheet': '缺失表', 'mapping': []}}}))
+        with patch('budgeting.services.data_read_audit.read_workbook', return_value={'sheets': []}):
+            result = build_upload_audit(self.upload, refresh=True)
+        self.assertEqual([i['reason_code'] for i in result['issues']], ['REPORT_MISSING'])
+        self.assertEqual(result['summary']['missing_cells'], 0)

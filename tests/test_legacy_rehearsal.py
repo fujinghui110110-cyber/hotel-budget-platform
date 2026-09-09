@@ -250,3 +250,13 @@ class LegacyRehearsalTests(TestCase):
         run = ValidationRun.objects.create(upload=self.upload, rule_version="R3")
         with self.assertRaises(ValueError):
             legacy_rehearsal.process_legacy_rehearsal(self.upload, self.source_path, run)
+
+
+class CountRoundingTests(TestCase):
+    def test_fractional_counts_are_rounded_half_up_with_provenance(self):
+        for raw, expected in [(12.4, 12), (12.5, 13), (0.4, 0), (-12.5, -13)]:
+            cell = _cell(2, 2, raw)
+            cell['_sheet'] = '汇总'
+            result = legacy_rehearsal._value(None, 'PL_TOTAL_WINE', 'R0039', '员工人数', 'YEAR', 2027, 'BUDGET', cell, 'COUNT')
+            self.assertEqual(result.value_int, expected)
+            self.assertEqual(result.source_cell, 'B2')
