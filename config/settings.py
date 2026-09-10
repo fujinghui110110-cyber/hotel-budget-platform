@@ -81,3 +81,15 @@ SOURCE_SHA256 = "bd62ff23f236b373c5f2cf38b146b7e7e5f099b38560c191fbb1ad51bf8141d
 SOFFICE_BIN = os.getenv("SOFFICE_BIN", shutil.which("soffice") or "/Applications/LibreOffice.app/Contents/MacOS/soffice")
 WORKER_HEARTBEAT_MAX_AGE_SECONDS = 30
 DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
+
+# Public access uses the same policy for login and account maintenance.
+PUBLIC_ACCESS = os.getenv("PUBLIC_ACCESS", "0") == "1"
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 12}},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+AUTHENTICATION_BACKENDS = ["budgeting.auth_security.PublicModelBackend"]
+MIDDLEWARE.insert(0, "budgeting.auth_security.LoginRateLimitMiddleware")
+LOGIN_RATE_LIMIT_PATH = Path(os.getenv("LOGIN_RATE_LIMIT_PATH", Path(DATABASES["default"]["NAME"]).parent / "login-rate-limit.sqlite3"))

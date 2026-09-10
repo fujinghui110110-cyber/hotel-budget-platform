@@ -2,6 +2,7 @@ from collections import Counter
 
 from django import forms
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 
 from budgeting.models import REPORTS, NormalizedValue, Project
 
@@ -97,6 +98,11 @@ class ProjectAccountForm(forms.Form):
         cleaned = super().clean()
         if not cleaned.get("is_admin") and not cleaned.get("project"):
             self.add_error("project", "项目账号必须绑定一个项目。")
+        if cleaned.get("password"):
+            try:
+                validate_password(cleaned["password"], get_user_model()(username=cleaned.get("username", "")))
+            except forms.ValidationError as exc:
+                self.add_error("password", exc)
         return cleaned
 
     def clean_username(self):
@@ -109,3 +115,13 @@ class ProjectAccountForm(forms.Form):
 class ResetPasswordForm(forms.Form):
     username = forms.CharField(label="账号", max_length=150)
     new_password = forms.CharField(label="新密码", widget=forms.PasswordInput(render_value=True))
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("new_password"):
+            user = get_user_model().objects.filter(username=cleaned.get("username", "")).first()
+            try:
+                validate_password(cleaned["new_password"], user)
+            except forms.ValidationError as exc:
+                self.add_error("new_password", exc)
+        return cleaned

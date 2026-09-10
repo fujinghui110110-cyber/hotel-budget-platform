@@ -358,3 +358,44 @@ class AuditEvent(models.Model):
     upload = models.ForeignKey(UploadVersion, null=True, blank=True, on_delete=models.SET_NULL)
     payload = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class IndicatorProject(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    project = models.OneToOneField(Project, null=True, blank=True, on_delete=models.SET_NULL, related_name='indicator_project')
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        return self.name
+
+
+class SpecialIndicatorBatch(models.Model):
+    year = models.PositiveIntegerField()
+    data_type = models.CharField(max_length=12, choices=[('ACTUAL', '实际'), ('FORECAST', '预测'), ('BUDGET', '预算')])
+    cycle = models.ForeignKey(BudgetCycle, null=True, blank=True, on_delete=models.PROTECT)
+    unit = models.CharField(max_length=12)
+    original = models.FileField(upload_to='special_indicators/%Y/%m/')
+    original_name = models.CharField(max_length=255)
+    sha256 = models.CharField(max_length=64)
+    created_by = models.ForeignKey('User', null=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['year', 'data_type'], condition=models.Q(active=True, cycle__isnull=True), name='unique_active_special_actual'),
+            models.UniqueConstraint(fields=['year', 'data_type', 'cycle'], condition=models.Q(active=True, cycle__isnull=False), name='unique_active_special_budget'),
+        ]
+
+
+class SpecialIndicatorValue(models.Model):
+    batch = models.ForeignKey(SpecialIndicatorBatch, on_delete=models.CASCADE, related_name='values')
+    project = models.ForeignKey(IndicatorProject, on_delete=models.PROTECT)
+    indicator = models.CharField(max_length=20)
+    month = models.PositiveSmallIntegerField()
+    value = models.DecimalField(max_digits=24, decimal_places=4, null=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['batch', 'project', 'indicator', 'month'], name='unique_special_indicator_month')]

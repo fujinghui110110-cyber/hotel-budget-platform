@@ -15,7 +15,7 @@
 
 ## 在 Mac 上启动
 
-项目当前的主运行方式是 Mac 本机服务。服务只监听 `127.0.0.1:8768`，数据保存在本机；没有域名时不会自动开放公网。
+项目当前的主运行方式是 Mac 本机服务。服务只监听 `127.0.0.1:8768`，数据保存在本机。需要外部访问时，可通过 [公网接入](docs/公网接入.md) 启动官方 Cloudflare 隧道。
 
 在终端执行：
 
@@ -49,7 +49,7 @@ set +a
 .venv/bin/python manage.py createsuperuser
 ```
 
-当前没有启用登录后自启，也没有启用公网隧道。登录后自启入口虽已提供，但需由管理员另行决定后再使用。
+本机和公网分别提供启动/关闭入口；启用公网前须更换演示密码。隧道运行时暂时防止系统空闲休眠，合盖、手动休眠、关机或断网仍会中断访问。
 
 ## 配置与数据边界
 
@@ -97,7 +97,7 @@ PYTHON_BIN=.venv/bin/python ./deploy/activate_template.sh 2027
 
 ## 外部访问和备用方案
 
-当前没有域名，因此不启动公网访问。未来有自有域名和 Cloudflare 账号后，可参考 [deploy/cloudflared/config.yml.example](deploy/cloudflared/config.yml.example) 建立命名 Tunnel，将外部 HTTPS 域名转发到 Mac 的 `http://127.0.0.1:8768`。隧道配置示例不会创建隧道，也不使用 Quick Tunnel；不要提交 Cloudflare JSON 凭据。
+没有域名时可按 [公网接入](docs/公网接入.md) 使用 Quick Tunnel 获得临时 HTTPS 地址，重启会变化。需要长期固定地址时，可参考 [deploy/cloudflared/config.yml.example](deploy/cloudflared/config.yml.example) 建立命名 Tunnel，将外部 HTTPS 域名转发到 Mac 的 `http://127.0.0.1:8768`。命名隧道配置示例不会自动创建隧道；不要提交 Cloudflare JSON 凭据。
 
 外部 HTTPS 验收完成后，应用配置才可以切换为 `TRUST_PROXY=1`、`SECURE_SSL_REDIRECT=1`、`SESSION_COOKIE_SECURE=1`、`CSRF_COOKIE_SECURE=1`，并填写实际域名的 `DJANGO_ALLOWED_HOSTS` 和 `CSRF_TRUSTED_ORIGINS`。本机生产示例保持 HTTP cookie 设置，不应直接拿到公网使用。
 
@@ -114,3 +114,5 @@ Docker 与 Caddy 文件保留在 `compose.yaml`、`Dockerfile` 和 `deploy/` 中
 ## GitHub 自动检查
 
 代码仓库为私有仓库。当前 GitHub 登录授权不含 `workflow` 权限，因此自动检查配置保存在 `deploy/github-actions-ci.yml.example`，尚未启用 GitHub Actions。账号获得相应权限后，可将该文件放到 `.github/workflows/ci.yml` 并提交。当前版本已在本机的独立发布副本中运行测试。
+
+专项指标模板导入、预算自动对应及图表使用见 [专项指标对比](docs/专项指标对比.md)。

@@ -8,6 +8,7 @@ from budgeting import version_report_views, summary_views
 
 
 urlpatterns = [
+    path("special-indicators/", include("budgeting.special_indicator_urls")),
     path("data-audit/", data_audit_views.data_audit, name="data_audit"),
     path("", include("budgeting.version_urls")),
     path("management/summary-adjustments/", summary_views.summary_list, name="summary_list"),

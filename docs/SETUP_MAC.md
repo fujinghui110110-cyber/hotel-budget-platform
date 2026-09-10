@@ -140,4 +140,4 @@ curl -fsS http://127.0.0.1:8768/healthz
 - `soffice` 不存在：安装 LibreOffice，或在 `.env` / `.env.production` 中设置实际的 `SOFFICE_BIN`。
 - 正式配置启动失败并提示 `DJANGO_SECRET_KEY`：检查是否仍为 `CHANGE_ME` 或长度不足 50 个字符。
 
-当前未配置公网访问，也未启用登录后自启。需要外部访问时，先完成域名、Cloudflare Tunnel 和 HTTPS 验收，再按 [部署方案](部署方案.md) 切换安全配置。
+公网接入使用独立进程及安全配置，无需改变本机 HTTP 设置。无域名试用见 [公网接入](公网接入.md)；固定域名方式见 [部署方案](部署方案.md)。登录后自启仍为可选。
