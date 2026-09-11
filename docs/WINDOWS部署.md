@@ -65,3 +65,9 @@ Windows 使用 Waitress 提供 Web 服务，Mac 使用 Gunicorn，两个平台�
 运行 `python3 scripts/prepare_windows_offline.py`。脚本从官方固定版本地址取得 Python、LibreOffice 安装器和 cloudflared 公网客户端，与 `scripts/windows_dependencies.json` 中官方发布的 SHA256 核对，再下载 Windows Python 3.13 x64 wheels。将生成的 `offline/windows/` 随源码打入部署压缩包，勿提交大体积安装器到 Git。更新版本时必须同步官方校验值。
 
 当前 Mac 已核验下载文件及离线 wheels；Windows 安装和 UAC 流程仍需 Windows 实机验收。
+
+## 首次管理员登录与修复
+
+首次安装不再要求在命令行手动创建用户。没有管理员时，系统自动创建独立的强密码管理员，并打开“本机账号信息”文件夹中的登录信息文件。按文件中的用户名与密码登录；不是其他电脑的旧密码。已有管理员时再次安装不会改密码。
+
+旧安装包创建账号失败或忘记密码时，双击系统根目录“修复管理员登录-Windows.bat”，选择管理员后输入 Y，复制新文件中的登录信息重新登录。只重置所选管理员密码，保留所有项目和预算；不要删除 db.sqlite3 或 storage。

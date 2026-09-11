@@ -18,6 +18,18 @@
 </section>
 <section class="panel update-panel"><h2>GitHub 下载凭据</h2><p id="update-configured">正在检查配置…</p><p>首次使用需填写私有仓库的只读下载凭据。凭据仅保存在本机，不会显示给项目用户。</p>
 <form id="update-config-form" method="post">{% csrf_token %}<label for="update-token">仅本系统仓库 · Contents 只读凭据</label><div class="access-link-row"><input id="update-token" type="password" name="token" autocomplete="new-password" maxlength="512" placeholder="输入新凭据后保存" required><button class="button button--secondary" id="update-save" type="submit" disabled>保存凭据</button></div></form>
+<details class="access-note"><summary>第一次使用？展开查看凭据设置步骤</summary>
+<p>这是一把只用来下载系统更新的钥匙，不是预算系统的登录密码。只需在服务器电脑设置一次，各项目不用设置。</p>
+<ol>
+<li>在此电脑打开 <a href="https://github.com/settings/personal-access-tokens/new?name=Budget-server-update&amp;target_name=fujinghui110110-cyber&amp;expires_in=90&amp;contents=read" target="_blank" rel="noopener noreferrer">GitHub 官方凭据创建页</a>，登录拥有本系统仓库的 GitHub 账号 <strong>fujinghui110110-cyber</strong>。</li>
+<li>确认 Resource owner 为上述账号，Expiration 为 90 天（到期后重新生成即可）。</li>
+<li>Repository access 选择 <strong>Only select repositories</strong>，勾选 <strong>hotel-budget-platform</strong>。此项需要手动选择。</li>
+<li>在 Permissions 中确认 <strong>Contents: Read-only</strong>；Metadata 的默认只读权限保留。不要增加写入权限。</li>
+<li>点击 <strong>Generate token</strong>，立即复制生成的完整凭据，回到此页粘贴到凭据输入框，点击“保存凭据”，再点击上方“检查更新”。</li>
+</ol>
+<p>生成后完整凭据只显示一次。请勿发送到聊天或放进截图；如遗失或到期，重新生成后在这里替换即可。看不到仓库时，先检查 GitHub 登录账号是否正确。</p>
+<p>提示：维护者发布稳定版本后才能检查到更新，单纯提交代码不会触发安装。更换电脑安装是独立数据库，旧电脑的预算账号不会自动复制。</p>
+</details>
 <p class="access-note">使用仅授权本系统仓库、Contents 只读权限的 GitHub fine-grained token。保存后输入框清空；留空不会修改原凭据。</p></section>
 <noscript><p class="message message--error">请启用 JavaScript，以检查更新和查看升级结果。</p></noscript>
 </div>

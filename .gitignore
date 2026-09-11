@@ -32,3 +32,6 @@ logs/
 
 # Offline installers are delivered in release ZIPs, not source control.
 offline/
+
+# Local administrator credentials must never be published.
+本机账号信息/

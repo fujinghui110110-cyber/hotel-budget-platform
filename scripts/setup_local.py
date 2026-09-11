@@ -26,11 +26,8 @@ def main():
     subprocess.run([sys.executable, str(ROOT / 'manage.py'), 'migrate', '--noinput'], cwd=ROOT, check=True)
     import django
     django.setup()
-    from django.contrib.auth import get_user_model
-    User = get_user_model()
-    if not User.objects.filter(is_superuser=True).exists():
-        print('Create the administrator account. Use a unique password of at least 12 characters.')
-        subprocess.run([sys.executable, str(ROOT / 'manage.py'), 'createsuperuser'], cwd=ROOT, check=True)
+    from scripts.admin_access import provision, reveal
+    reveal(provision(ROOT))
     print('Local initialization complete. No sample projects or budgets were created.')
 
 
