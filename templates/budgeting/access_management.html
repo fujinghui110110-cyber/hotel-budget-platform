@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}公网访问 · 酒店预算系统{% endblock %}
+{% block breadcrumb %}<span>系统设置</span><span aria-hidden="true">/</span><span>公网访问</span>{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/access.css' %}">{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div>
+  <p class="eyebrow">电脑服务器</p>
+  <h1>公网访问</h1>
+  <p class="lede">先在本机登录，再生成链接，供各项目上传预算。</p>
+  </div>
+</section>
+<div class="access-layout">
+  <section class="panel access-local" aria-labelledby="local-title">
+    <p class="eyebrow">固定入口 · 管理员使用</p>
+    <h2 id="local-title">本机登录地址</h2>
+    <a class="access-local-url" href="http://127.0.0.1:8768">http://127.0.0.1:8768</a>
+    <p>在运行系统的 Windows 或 Mac 电脑上打开。公网服务重新启动时，本机入口保持可用。</p>
+    <p class="access-note">其他电脑的 127.0.0.1 指向它们自己，请将生成的公网链接发给项目。</p>
+  </section>
+  <section class="panel access-public" aria-labelledby="public-title">
+    <div class="section-heading"><div><p class="eyebrow">公网入口 · 项目使用</p><h2 id="public-title">项目访问链接</h2></div><span class="badge" id="access-badge">{% if local_control %}正在读取{% else %}请在本机管理{% endif %}</span></div>
+    {% if local_control %}
+    <div id="access-controls" data-status-url="{% url 'access_status' %}" data-action-url="{% url 'access_action' %}">
+      <p id="access-status" role="status" aria-live="polite">正在读取公网服务状态…</p>
+      <div id="access-link-area" hidden>
+        <label for="access-url">将此链接发送给各项目，使用各自账号登录</label>
+        <div class="access-link-row"><input id="access-url" type="text" readonly><button class="button button--secondary" id="access-copy" type="button">复制链接</button></div>
+        <a id="access-open" target="_blank" rel="noopener noreferrer">打开公网登录页 ↗</a>
+      </div>
+      <p id="access-error" class="message message--error" role="alert" hidden></p>
+      <form id="access-form" method="post" action="{% url 'access_action' %}">{% csrf_token %}
+        <div class="access-actions"><button class="button button--primary" name="action" value="restart" id="access-restart" type="submit" disabled>生成公网链接</button><button class="button button--secondary" name="action" value="stop" id="access-stop" type="submit" disabled>停止公网访问</button></div>
+      </form>
+      <p class="access-note">每次生成都会重启公网服务，旧链接将失效。生成通常需要 1–2 分钟，请避开项目正在上传的时间。</p>
+      <noscript><p class="message message--error">请启用浏览器 JavaScript，以生成链接并查看实时状态。</p></noscript>
+    </div>
+    {% else %}
+    <p>请在服务器电脑上打开 <strong>http://127.0.0.1:8768</strong>，登录管理员账号后生成或停止公网链接。</p>
+    {% endif %}
+  </section>
+</div>
+<section class="panel access-help" aria-labelledby="access-help-title">
+  <h2 id="access-help-title">保持项目可以访问</h2>
+  <p>服务器电脑需要保持开机、联网且不休眠。关闭浏览器不会停止系统；关闭电脑后，项目将无法访问。</p>
+  <p>当前使用免费临时公网链接，链接会随服务重启变化。生成成功后，请把新链接发给项目。访问是否畅通仍取决于服务器和项目所在地的网络。</p>
+</section>
+{% endblock %}
+{% block extra_scripts %}{% if local_control %}<script src="{% static 'budgeting/access.js' %}" defer></script>{% endif %}{% endblock %}

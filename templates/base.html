@@ -31,6 +31,7 @@
       </nav>
       <div class="side-nav side-nav--secondary">
         <span class="side-nav__caption">系统设置</span>
+        <a href="{% url 'access_management' %}" class="{% if request.resolver_match.url_name == 'access_management' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/building-2.svg' %}" alt="">公网访问</a>
         <a href="{% url 'management_budget_versions' %}" class="{% if 'management_budget_version' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calendar-range.svg' %}" alt="">预算版本</a>
         <a href="{% url 'management_org' %}" class="{% if request.resolver_match.url_name == 'management_org' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/users.svg' %}" alt="">组织与账号</a>
         <a href="{% url 'management_audit' %}" class="{% if request.resolver_match.url_name == 'management_audit' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/scroll-text.svg' %}" alt="">审计留痕</a>

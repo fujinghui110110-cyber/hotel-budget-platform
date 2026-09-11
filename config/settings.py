@@ -78,7 +78,14 @@ LOGOUT_REDIRECT_URL = "/login/"
 BUDGET_STORAGE_ROOT = Path(os.getenv("BUDGET_STORAGE_ROOT", BASE_DIR / "storage"))
 SOURCE_WORKBOOK = Path(os.getenv("SOURCE_WORKBOOK", BASE_DIR / "source" / "template.xlsx"))
 SOURCE_SHA256 = "bd62ff23f236b373c5f2cf38b146b7e7e5f099b38560c191fbb1ad51bf8141dc"
-SOFFICE_BIN = os.getenv("SOFFICE_BIN", shutil.which("soffice") or "/Applications/LibreOffice.app/Contents/MacOS/soffice")
+_soffice_candidates = [
+    Path(os.getenv("ProgramFiles", "C:/Program Files")) / "LibreOffice/program/soffice.exe",
+    Path(os.getenv("ProgramFiles(x86)", "C:/Program Files (x86)")) / "LibreOffice/program/soffice.exe",
+    Path("/Applications/LibreOffice.app/Contents/MacOS/soffice"),
+]
+SOFFICE_BIN = os.getenv("SOFFICE_BIN") or shutil.which("soffice") or next(
+    (str(path) for path in _soffice_candidates if path.is_file()), "soffice"
+)
 WORKER_HEARTBEAT_MAX_AGE_SECONDS = 30
 DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
 

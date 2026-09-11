@@ -1,4 +1,6 @@
 Django==5.2.6
 openpyxl==3.1.5
-gunicorn==23.0.0
+gunicorn==23.0.0; sys_platform != "win32"
 whitenoise==6.9.0
+waitress==3.0.2
+psutil==7.0.0

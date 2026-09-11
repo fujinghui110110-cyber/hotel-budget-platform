@@ -1,4 +1,5 @@
 #!/bin/sh
 set -eu
 SYSTEM_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec /bin/sh "$SYSTEM_ROOT/启动预算统筹系统.command" stop
+cd "$SYSTEM_ROOT"
+exec "$SYSTEM_ROOT/.venv/bin/python" scripts/stop_all.py

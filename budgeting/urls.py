@@ -5,9 +5,13 @@ from budgeting import cockpit_views
 from budgeting import planning_views
 from budgeting import workpaper_views
 from budgeting import version_report_views, summary_views
+from budgeting import access_views
 
 
 urlpatterns = [
+    path("management/access/", access_views.access_management, name="access_management"),
+    path("management/access/status/", access_views.access_status, name="access_status"),
+    path("management/access/action/", access_views.access_action, name="access_action"),
     path("special-indicators/", include("budgeting.special_indicator_urls")),
     path("data-audit/", data_audit_views.data_audit, name="data_audit"),
     path("", include("budgeting.version_urls")),
