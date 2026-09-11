@@ -188,6 +188,14 @@ def install_autostart(port):
 
 
 def main():
+    pointer = RUNTIME / "active-python.json"
+    if pointer.exists():
+        selected = Path(json.loads(pointer.read_text(encoding="utf-8"))["path"])
+        if not selected.is_file():
+            raise RuntimeError("更新运行环境缺失，请按系统更新说明恢复旧版本")
+        # Preserve the venv path: resolve() would collapse POSIX Python symlinks.
+        if os.path.abspath(selected) != os.path.abspath(sys.executable):
+            os.execv(str(selected), [str(selected), str(Path(__file__).resolve()), *sys.argv[1:]])
     load_environment()
     parser = argparse.ArgumentParser(description="预算统筹系统后台服务管理")
     parser.add_argument("action", choices=["start", "serve", "stop", "status", "enable-autostart", "disable-autostart"])

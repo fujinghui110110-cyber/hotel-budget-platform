@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}系统更新 · 酒店预算系统{% endblock %}
+{% block breadcrumb %}<span>系统设置</span><span aria-hidden="true">/</span><span>系统更新</span>{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/access.css' %}"><link rel="stylesheet" href="{% static 'css/update.css' %}">{% endblock %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">电脑服务器</p><h1>系统更新</h1><p class="lede">检查已发布的稳定版本，一键更新服务器，各项目刷新网页即可使用新版。</p></div></section>
+{% if local_control %}
+<div id="update-controls" data-status-url="{% url 'update_status' %}" data-action-url="{% url 'update_action' %}">
+<section class="panel update-panel">
+<div class="section-heading"><h2>版本与更新</h2><span class="badge" id="update-badge">读取中</span></div>
+<dl class="update-versions"><div><dt>当前版本</dt><dd id="update-current">—</dd></div><div><dt>可用版本</dt><dd id="update-available">—</dd></div></dl>
+<p id="update-status" role="status" aria-live="polite">正在读取更新状态…</p>
+<p id="update-error" class="message message--error" role="alert" hidden></p>
+<div id="update-notes-wrap" hidden><h3>更新说明</h3><pre id="update-notes"></pre></div>
+<form id="update-form" method="post">{% csrf_token %}<div class="access-actions"><button class="button button--secondary" type="submit" name="action" value="check" id="update-check" disabled>检查更新</button><button class="button button--primary" type="submit" name="action" value="install" id="update-install" disabled>更新并重启</button></div></form>
+<p class="access-note">更新前自动备份数据库和配置，保留账号、预算文件与已上传数据。升级期间请暂停填报；页面短暂断开后会自动重连。启动检查失败时自动恢复旧版本。更新会暂停公网访问，完成后请到“公网访问”页重新生成项目链接；如新版依赖有变化，安装时需联网下载。</p>
+</section>
+<section class="panel update-panel"><h2>GitHub 下载凭据</h2><p id="update-configured">正在检查配置…</p><p>首次使用需填写私有仓库的只读下载凭据。凭据仅保存在本机，不会显示给项目用户。</p>
+<form id="update-config-form" method="post">{% csrf_token %}<label for="update-token">仅本系统仓库 · Contents 只读凭据</label><div class="access-link-row"><input id="update-token" type="password" name="token" autocomplete="new-password" maxlength="512" placeholder="输入新凭据后保存" required><button class="button button--secondary" id="update-save" type="submit" disabled>保存凭据</button></div></form>
+<p class="access-note">使用仅授权本系统仓库、Contents 只读权限的 GitHub fine-grained token。保存后输入框清空；留空不会修改原凭据。</p></section>
+<noscript><p class="message message--error">请启用 JavaScript，以检查更新和查看升级结果。</p></noscript>
+</div>
+{% else %}<section class="panel update-panel"><h2>请在服务器电脑上更新</h2><p>在运行系统的电脑打开 <strong>http://127.0.0.1:8768</strong>，登录管理员账号后检查并安装更新。</p></section>{% endif %}
+{% if local_control %}<script src="{% static 'budgeting/update.js' %}" defer></script>{% endif %}{% endblock %}

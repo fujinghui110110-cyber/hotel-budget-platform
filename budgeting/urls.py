@@ -1,3 +1,4 @@
+from budgeting import update_views
 from django.urls import include, path
 
 from budgeting import views, data_audit_views
@@ -9,6 +10,9 @@ from budgeting import access_views
 
 
 urlpatterns = [
+    path("management/update/", update_views.update_management, name="update_management"),
+    path("management/update/status/", update_views.update_status, name="update_status"),
+    path("management/update/action/", update_views.update_action, name="update_action"),
     path("management/access/", access_views.access_management, name="access_management"),
     path("management/access/status/", access_views.access_status, name="access_status"),
     path("management/access/action/", access_views.access_action, name="access_action"),

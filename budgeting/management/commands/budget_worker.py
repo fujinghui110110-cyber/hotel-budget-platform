@@ -2,6 +2,7 @@ import time
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
+from django.conf import settings
 from django.db import OperationalError, connection
 from django.db.models import F
 from django.utils import timezone
@@ -20,6 +21,11 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         while True:
+            if (settings.BASE_DIR / '.runtime/update-maintenance').exists():
+                if options["once"]:
+                    break
+                time.sleep(options["sleep"])
+                continue
             job = self._claim_job(options["lease_seconds"])
             if job:
                 self._run_job(job)
