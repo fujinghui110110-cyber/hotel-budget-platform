@@ -69,8 +69,10 @@ def current_version():
 def status():
     state = read_json(runtime('update-state.json'))
     busy = bool(state.get('busy'))
-    if busy and state.get('process') and not identity_matches(state['process']):
-        state.update(busy=False, status='interrupted', error='更新进程已中断。请在服务器运行恢复命令，详情见系统更新说明。')
+    stale_launch = busy and not state.get('process') and time.time() - state.get('updated_at', runtime('update-state.json').stat().st_mtime) > 30
+    if busy and ((state.get('process') and not identity_matches(state['process'])) or stale_launch):
+        recovery_needed = runtime('update-journal.json').exists() or runtime('update-maintenance').exists()
+        state.update(busy=False, status='interrupted', error=('更新进程已中断。请在服务器运行恢复命令，详情见系统更新说明。' if recovery_needed else '更新启动已中断，程序和数据尚未替换。请重新检查更新。'))
     release = read_json(runtime('update-release.json'))
     return {**state, 'current_version': current_version(),
             'available_version': release.get('version', ''),
@@ -190,7 +192,7 @@ def validate_archive(archive, target, expected_version):
 
 def state(phase, **extra):
     old = read_json(runtime('update-state.json'))
-    write_json(runtime('update-state.json'), {**old, 'status': phase, **extra})
+    write_json(runtime('update-state.json'), {**old, 'status': phase, 'updated_at': time.time(), **extra})
 
 
 def start_update():
@@ -198,7 +200,7 @@ def start_update():
         info = status()
         if info['busy']:
             return info
-        if info['status'] == 'interrupted' or runtime('update-journal.json').exists():
+        if runtime('update-journal.json').exists() or runtime('update-maintenance').exists():
             raise UpdateError('上次更新未完成，请先执行恢复命令。')
         if not info['update_available']:
             raise UpdateError('请先检查更新，当前没有可安装的新版本。')

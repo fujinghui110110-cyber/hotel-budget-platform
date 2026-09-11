@@ -78,3 +78,18 @@ class UpdateManagementTests(TestCase):
         self.assertContains(self.client.get('/management/update/', **self.headers), 'budgeting/update.js')
         self.client.logout()
         self.assertEqual(self.client.get('/management/update/', **self.headers).status_code, 302)
+
+    @patch('budgeting.update_views.system_update.status', side_effect=ValueError('invalid state'))
+    def test_bad_local_state_still_renders_recovery_controls(self, status):
+        response = self.client.get('/management/update/', **self.headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '读取更新状态失败')
+        response = self.client.get('/management/update/status/', **self.headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'status_error')
+        self.assertFalse(response.json()['busy'])
+
+    @patch('budgeting.update_views.system_update.status', return_value={'current_version': '2026.09.11.3', 'configured': False, 'busy': False})
+    def test_initial_page_includes_state_without_waiting_for_fetch(self, status):
+        response = self.client.get('/management/update/', **self.headers)
+        self.assertContains(response, '2026.09.11.3')

@@ -15,7 +15,11 @@ def _allowed(request):
 
 
 def _state(state=None):
-    state = system_update.status() if state is None else state
+    if state is None:
+        try:
+            state = system_update.status()
+        except (OSError, RuntimeError, ValueError, TypeError):
+            state = {'status': 'status_error', 'busy': False, 'error': '读取更新状态失败，请点击重新读取状态。若仍失败，请检查本机 .runtime 文件夹的权限。'}
     return {key: state.get(key, default) for key, default in (
         ('current_version', ''), ('available_version', ''), ('release_notes', ''),
         ('update_available', False), ('configured', False), ('status', 'idle'),
@@ -31,6 +35,7 @@ def update_management(request):
         return HttpResponseForbidden('仅管理员可以管理系统更新。')
     return render(request, 'budgeting/update_management.html', {
         'local_control': local_control_allowed(request),
+        'initial_state': _state() if local_control_allowed(request) else {},
     })
 
 

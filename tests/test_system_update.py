@@ -108,3 +108,13 @@ class SystemUpdateTests(SimpleTestCase):
         self.assertEqual((self.root / 'manage.py').read_text(), 'old')
         with sqlite3.connect(db) as conn:
             self.assertEqual(conn.execute('select value from sentinel').fetchone()[0], 'preserved')
+
+    def test_stale_launch_without_process_does_not_spin_forever(self):
+        update.write_json(update.runtime('update-state.json'), {'busy': True, 'status': 'starting', 'process': None, 'updated_at': 1})
+        self.assertFalse(update.status()['busy'])
+        self.assertEqual(update.status()['status'], 'interrupted')
+
+    def test_recent_launch_is_still_busy(self):
+        import time
+        update.write_json(update.runtime('update-state.json'), {'busy': True, 'status': 'starting', 'process': None, 'updated_at': time.time()})
+        self.assertTrue(update.status()['busy'])
