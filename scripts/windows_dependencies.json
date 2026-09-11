@@ -1,0 +1,24 @@
+{
+  "architecture": "AMD64",
+  "python": {
+    "version": "3.13.15",
+    "filename": "python-3.13.15-amd64.exe",
+    "url": "https://www.python.org/ftp/python/3.13.15/python-3.13.15-amd64.exe",
+    "sha256": "edec09c4853aeae9ac36efb8c9f95b6b8e2fee65eee56d9767a8b7c69c574403",
+    "checksum_source": "https://www.python.org/ftp/python/3.13.15/python-3.13.15-amd64.exe.sigstore"
+  },
+  "libreoffice": {
+    "version": "26.2.6",
+    "filename": "LibreOffice_26.2.6_Win_x86-64.msi",
+    "url": "https://download.documentfoundation.org/libreoffice/stable/26.2.6/win/x86_64/LibreOffice_26.2.6_Win_x86-64.msi",
+    "sha256": "f9877032fd908beb9c0ddf06df4af5c2e85f419c42e14876c4cce5aae5fb2660",
+    "checksum_source": "https://download.documentfoundation.org/libreoffice/stable/26.2.6/win/x86_64/LibreOffice_26.2.6_Win_x86-64.msi.sha256"
+  },
+  "cloudflared": {
+    "version": "2026.9.0",
+    "filename": "cloudflared-windows-amd64.exe",
+    "url": "https://github.com/cloudflare/cloudflared/releases/download/2026.9.0/cloudflared-windows-amd64.exe",
+    "sha256": "547057326266f0e1c7d50d102dbd22ff283d740c055bd61e94f10e2c606f89af",
+    "checksum_source": "https://api.github.com/repos/cloudflare/cloudflared/releases/385758990"
+  }
+}

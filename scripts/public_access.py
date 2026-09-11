@@ -217,6 +217,19 @@ def _stop():
     _write(STATE, {'status': 'stopped', 'running': False, 'children': [], 'children_identity': [], 'url': None})
 
 
+def generated_tunnel_url(log):
+    match = re.search(r'\|\s*(https://[a-z0-9]+(?:-[a-z0-9]+)*\.trycloudflare\.com)\s*\|', log)
+    return match.group(1) if match else None
+
+
+def tunnel_error(log):
+    if any(text in log.lower() for text in ('context deadline exceeded', 'timeout', 'timed out')):
+        return '连接公网服务商超时，请检查网络后重新生成链接。本机系统可继续使用。'
+    if 'no such host' in log.lower():
+        return '无法解析公网服务商地址，请检查网络或 DNS 后重试。'
+    return '公网隧道连接失败，请检查网络；详细原因见 logs/public-tunnel.log。'
+
+
 def serve():
     with FileLock(RUNTIME / 'public-access.lock'):
         STOP_REQUEST.unlink(missing_ok=True)
@@ -246,12 +259,12 @@ def serve():
             for _ in range(120):
                 if STOP_REQUEST.exists():
                     raise InterruptedError('stop')
-                match = URL_PATTERN.search(tunnel_log.read_text(encoding='utf-8', errors='replace'))
-                if match:
-                    url = match.group(0)
-                    break
+                log = tunnel_log.read_text(encoding='utf-8', errors='replace')
                 if any(p.poll() is not None for p in children):
-                    raise RuntimeError('公网隧道启动失败，请查看 logs/public-tunnel.log。')
+                    raise RuntimeError(tunnel_error(log))
+                url = generated_tunnel_url(log)
+                if url:
+                    break
                 time.sleep(1)
             if not url:
                 raise RuntimeError('公网链接生成超时，请检查网络后重试。')
@@ -263,7 +276,9 @@ def serve():
             for _ in range(60):
                 if STOP_REQUEST.exists():
                     raise InterruptedError('stop')
-                if any(p.poll() is not None for p in children):
+                if tunnel.poll() is not None:
+                    raise RuntimeError(tunnel_error(tunnel_log.read_text(encoding='utf-8', errors='replace')))
+                if children[-1].poll() is not None:
                     raise RuntimeError('公网网页服务启动失败，请查看 logs/public-web.log。')
                 try:
                     with socket.create_connection(('127.0.0.1', PORT), timeout=.5):

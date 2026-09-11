@@ -4,12 +4,15 @@
 
 ## 首次安装
 
-1. 从本系统私有 GitHub 仓库下载当前版本并解压到长期保留的目录，例如 `D:\HotelBudget`。不要放进会自动清理的临时目录。
-2. 安装 Python 3.13（包含 Python Launcher `py`），以及 LibreOffice Windows 版。LibreOffice 用于 Excel 公式重算。
-3. 双击根目录的 `安装预算统筹系统-Windows.bat`。安装程序创建 `.venv`、安装依赖、初始化数据库，并让你设置管理员用户名和强密码（至少 12 位）。输入密码时终端不显示字符是正常的。不会添加演示项目或预算。
-4. 安装成功后浏览器自动打开本机地址。使用刚创建的管理员账号登录。
+1. 下载含依赖的部署包并解压到长期保留的目录，例如 `D:\HotelBudget`。支持 Windows 10/11 x64，不支持 ARM64 或 32 位 Windows。
+2. 双击 `安装预算统筹系统-Windows.bat`。程序会检测 Python 3.13 x64 和 LibreOffice；已有兼容安装直接使用，缺少时自动安装。LibreOffice 安装可能弹出 Windows 管理员授权窗口，选择允许即可。
+3. 按提示设置管理员用户名和强密码，安装完成自动打开固定本机地址。
 
-安装程序需要网络下载 Python 依赖；公网组件由系统的公网访问功能准备。下载失败时保留本机数据，恢复网络后可重试。脚本不会覆盖已有 `.env` 或重置已有管理员密码。若已有 `.env.production`，其配置优先于 `.env`，迁移旧电脑时须检查其中路径。
+完整部署包的 `offline/windows/` 包含 Python 3.13.15、LibreOffice 26.2.6 官方安装器，cloudflared 公网客户端，以及系统所需 Python wheel。安装时先验证 SHA256 再执行，Python 库可直接离线安装；离线包缺损时明确报错，不会静默切换联网。仅下载 GitHub 源码时不会带大体积安装器，脚本会从官方地址下载缺失安装器，并联网安装 Python 库。公网链接本身仍需要联网。
+
+Python 是系统运行环境；LibreOffice 在后台重新计算 Excel 公式，补足某些表格缺少或过期的公式缓存，否则读取预算时可能出现“公式有内容但金额为空”。它不要求用户日常打开操作，也不会替代原始预算文件。安装仅发生在服务器电脑，各项目只需浏览器。
+
+已有 `.env` 或 `.env.production` 不会覆盖；其中旧电脑路径须按下方迁移说明核对。初始化只创建缺少的数据库结构和管理员，不插入模拟业务数据。
 
 ## 日常使用
 
@@ -50,9 +53,15 @@
 ## 排查
 
 - 找不到 `py`：安装 Python 3.13 及 Launcher 后重试。
-- 找不到 LibreOffice：使用官方 Windows 安装包安装至默认目录，再运行安装程序。
+- LibreOffice 安装失败：检查 Windows 管理员授权是否允许，按退出码处理后重新运行安装批处理。
 - 端口占用：启动程序会报错，不会结束其他软件。检查占用 8768 的应用。
 - 启动失败：查看 `logs/server.log`、`logs/web.log`、`logs/worker.log`。
 - 本机能打开、公网生成失败：在公网访问页面查看失败原因，检查网络对 Cloudflare 的连通性。Quick Tunnel 是临时公网入口，其可用性取决于网络和 Cloudflare 服务。
 
 Windows 使用 Waitress 提供 Web 服务，Mac 使用 Gunicorn，两个平台均运行独立的预算处理任务。Windows 兼容分支已做自动检查，但当前开发环境为 Mac；交付不包含 Windows 实机验收结论。
+
+## 制作含依赖的部署包（维护者）
+
+运行 `python3 scripts/prepare_windows_offline.py`。脚本从官方固定版本地址取得 Python、LibreOffice 安装器和 cloudflared 公网客户端，与 `scripts/windows_dependencies.json` 中官方发布的 SHA256 核对，再下载 Windows Python 3.13 x64 wheels。将生成的 `offline/windows/` 随源码打入部署压缩包，勿提交大体积安装器到 Git。更新版本时必须同步官方校验值。
+
+当前 Mac 已核验下载文件及离线 wheels；Windows 安装和 UAC 流程仍需 Windows 实机验收。

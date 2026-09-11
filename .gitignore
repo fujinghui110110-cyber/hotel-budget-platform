@@ -29,3 +29,6 @@ storage/*
 !storage/.gitkeep
 backups/
 logs/
+
+# Offline installers are delivered in release ZIPs, not source control.
+offline/

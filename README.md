@@ -124,3 +124,9 @@ Docker 与 Caddy 文件保留在 `compose.yaml`、`Dockerfile` 和 `deploy/` 中
 代码仓库为私有仓库。当前 GitHub 登录授权不含 `workflow` 权限，因此自动检查配置保存在 `deploy/github-actions-ci.yml.example`，尚未启用 GitHub Actions。账号获得相应权限后，可将该文件放到 `.github/workflows/ci.yml` 并提交。当前版本已在本机的独立发布副本中运行测试。
 
 专项指标模板导入、预算自动对应及图表使用见 [专项指标对比](docs/专项指标对比.md)。
+
+### Windows 离线安装包
+
+Windows x64 首次安装可直接解压完整离线包，双击 `安装预算统筹系统-Windows.bat`。系统自动检测 Python 3.13 和 LibreOffice，缺失时使用包内安装器安装；Python 依赖和公网连接程序也已随包提供。LibreOffice 安装可能弹出 Windows 管理员确认。详见 [Windows 部署说明](docs/WINDOWS部署.md)。
+
+LibreOffice 用于重新计算上传 Excel 的公式，避免公式缓存为空或过期导致汇总数据缺失；项目人员无需手动打开它。生成公网链接时仍需要联网。
