@@ -1,3 +1,4 @@
+from budgeting import history_views, batch_views
 from budgeting import update_views
 from django.urls import include, path
 
@@ -10,6 +11,10 @@ from budgeting import access_views
 
 
 urlpatterns = [
+    path("management/batch-upload/", batch_views.batch_upload, name="management_batch_upload"),
+    path("management/history/", history_views.history_management, name="history_management"),
+    path("management/history/<uuid:batch_id>/", history_views.history_review, name="history_review"),
+    path("management/history/<uuid:batch_id>/original/", history_views.history_original, name="history_original"),
     path("management/update/", update_views.update_management, name="update_management"),
     path("management/update/status/", update_views.update_status, name="update_status"),
     path("management/update/action/", update_views.update_action, name="update_action"),

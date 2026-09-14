@@ -38,7 +38,7 @@ ZZ_RULES = {
 def validate_management_values(upload, run):
     validate_variances(upload, run)
     groups = {}
-    for value in NormalizedValue.objects.filter(upload=upload, report_code__startswith='PL_'):
+    for value in NormalizedValue.objects.filter(upload=upload, report_code__startswith='PL_').exclude(data_kind__in=['ACTUAL', 'FORECAST']):
         groups.setdefault((value.report_code, value.period), {})[value.row_code] = value
     for (report, period), rows in groups.items():
         split = report.startswith('PL_ZZ')

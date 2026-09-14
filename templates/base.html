@@ -28,6 +28,8 @@
         <a href="{% url 'cockpit_questions' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if 'question' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/messages-square.svg' %}" alt="">审核问答</a>
         <a href="{% url 'data_audit' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if request.resolver_match.url_name == 'data_audit' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/scroll-text.svg' %}" alt="">数据审计</a>
       <a href="/management/templates/{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if request.resolver_match.url_name == 'planning_templates' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">模板与填报</a>
+      <a href="{% url 'management_batch_upload' %}" class="{% if request.resolver_match.url_name == 'management_batch_upload' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">批量上传预算</a>
+      <a href="{% url 'history_management' %}" class="{% if request.resolver_match.url_name == 'history_management' or request.resolver_match.url_name == 'history_review' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">历史损益数据</a>
       </nav>
       <div class="side-nav side-nav--secondary">
         <span class="side-nav__caption">系统设置</span>

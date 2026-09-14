@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}历史损益数据 · 酒店预算系统{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/imports.css' %}?v=20260914-1">{% endblock %}
+{% block content %}<div class="import-workspace">
+<section class="page-heading"><div><h1>历史损益数据</h1><p>管理员单独上传损益汇总，按科目名称匹配并确认。实际、预测按各自年度保存，可用于以后预算年度。</p></div></section>
+<section class="panel" style="padding:24px;margin-bottom:24px">
+<h2>上传损益汇总</h2><p>文件名识别项目，上传后先预览“原科目 → 系统科目”。无需固定模板或固定行号；金额只读取文件已保存的数值。</p>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<button class="button button--primary">上传并预览科目匹配</button></form>
+<p class="access-note">每次选择一份项目文件及一个年度、实际/预测口径。确认后替换该项目同年度同口径报表；不会修改原件或冻结预算。未确认的文件不会影响报表。</p>
+</section>
+<section class="panel" style="padding:24px"><h2>上传记录</h2>
+<div class="table-scroll"><table><thead><tr><th>项目</th><th>年度与口径</th><th>文件</th><th>状态</th><th>操作</th></tr></thead><tbody>
+{% for item in batches %}<tr><td>{{ item.project.name }}</td><td>{{ item.data_year }} {{ item.get_data_kind_display }}</td><td>{{ item.original_name }}</td><td>{% if item.active %}已生效{% elif item.confirmed_at %}已替换{% else %}待确认{% endif %}</td><td><a href="{% url 'history_review' item.pk %}">查看匹配与数据</a></td></tr>{% empty %}<tr><td colspan="5">尚未上传独立历史损益数据。</td></tr>{% endfor %}
+</tbody></table></div></section>
+</div>{% endblock %}

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}批量上传预算{% endblock %}
+{% block breadcrumb %}<span>预算管理</span><span>批量上传预算</span>{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/imports.css' %}?v=20260914-1">{% endblock %}
+{% block content %}<div class="import-workspace">
+<section class="page-heading page-heading--split">
+  <div>
+    <p class="eyebrow">BATCH UPLOAD</p>
+    <h1>批量上传预算底稿</h1>
+    <p class="page-heading__lead">按文件名中的项目代码或项目名称识别项目，整批预检通过后再写入上传队列。</p>
+  </div>
+  <div class="page-heading__actions">
+    {% if cycle %}<span class="status-badge status-badge--{{ cycle.status|lower }} status-badge--large">{{ cycle.budget_year }} 年 R{{ cycle.revision_no }} · {{ cycle.get_status_display }}</span>{% endif %}
+  </div>
+</section>
+
+<section class="panel-card" aria-labelledby="batch-upload-form-title">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">PRECHECK</p>
+      <h2 id="batch-upload-form-title">选择文件</h2>
+    </div>
+    <span class="section-heading__hint">最多 {{ max_files }} 个文件，总量 {{ max_total_mb }} MiB</span>
+  </div>
+  <form class="stack-form" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="field-group">
+      <label for="cycle">预算版本</label>
+      <select id="cycle" name="cycle" required>
+        {% for item in cycles %}
+        <option value="{{ item.pk }}"{% if cycle and item.pk == cycle.pk %} selected{% endif %}>{{ item.budget_year }} 年预算 R{{ item.revision_no }} · {{ item.get_status_display }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field-group">
+      <label for="files">预算底稿</label>
+      <input id="files" name="files" type="file" accept=".xlsx,.xlsm" multiple required>
+      <small class="muted">普通预算版本仅接收 .xlsx；历史演练版本可接收 .xlsx 和 .xlsm。</small>
+    </div>
+    <button class="button button--primary" type="submit">识别项目并上传</button>
+  </form>
+</section>
+
+{% if preflight %}
+<section class="section-block" aria-labelledby="batch-preflight-title">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">RESULT</p>
+      <h2 id="batch-preflight-title">预检结果</h2>
+    </div>
+    <span class="section-heading__hint">{{ preflight.items|length }} 个文件 · {{ preflight.total_size_mb }} MiB</span>
+  </div>
+  {% if preflight.errors %}
+  <div class="message message--error">
+    {% for error in preflight.errors %}{{ error }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
+  </div>
+  {% endif %}
+  <div class="table-card">
+    <div class="table-scroll">
+      <table class="data-table">
+        <caption class="sr-only">批量上传预算底稿预检结果</caption>
+        <thead>
+          <tr>
+            <th scope="col">文件</th>
+            <th scope="col">识别项目</th>
+            <th scope="col">状态</th>
+            <th scope="col">说明</th>
+            <th scope="col" class="align-right">详情</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in preflight.items %}
+          {% if outcome %}
+            {% for result in outcome.items %}
+              {% if result.check.position == item.position %}
+                <tr>
+                  <td><strong>{{ item.filename }}</strong><small class="table-subtext">{{ item.size|filesizeformat }}</small></td>
+                  <td>{% if item.project %}{{ item.project.code }} {{ item.project.name }}{% else %}未识别{% endif %}</td>
+                  <td><span class="status-badge status-badge--{{ result.status|lower }}">{{ result.status }}</span></td>
+                  <td>{% if result.error %}{{ result.error }}{% else %}{{ item.message }}{% endif %}</td>
+                  <td class="align-right">{% if result.upload %}<a class="button button--secondary button--small" href="{% url 'project_upload_detail' result.upload.pk %}">查看状态</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+                </tr>
+              {% endif %}
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td><strong>{{ item.filename }}</strong><small class="table-subtext">{{ item.size|filesizeformat }}</small></td>
+              <td>{% if item.project %}{{ item.project.code }} {{ item.project.name }}{% else %}未识别{% endif %}</td>
+              <td><span class="status-badge status-badge--{{ item.status|lower }}">{{ item.status }}</span></td>
+              <td>{{ item.message }}</td>
+              <td class="align-right"><span class="muted">预检阶段</span></td>
+            </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endif %}
+</div>{% endblock %}

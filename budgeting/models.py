@@ -155,6 +155,48 @@ class ProcessingJob(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+class HistoricalImport(models.Model):
+    """Administrator-owned historical source, independent of budget revisions."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(Project, on_delete=models.PROTECT)
+    data_year = models.PositiveIntegerField()
+    data_kind = models.CharField(max_length=12, choices=[("ACTUAL", "实际"), ("FORECAST", "预测")])
+    report_code = models.CharField(max_length=40, choices=list(REPORTS.items()))
+    money_unit = models.CharField(max_length=8, default="yuan")
+    original_name = models.CharField(max_length=255)
+    original_path = models.CharField(max_length=500)
+    sha256 = models.CharField(max_length=64)
+    proposal = models.JSONField(default=dict)
+    active = models.BooleanField(default=False)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [models.UniqueConstraint(
+            fields=["project", "data_year", "data_kind", "report_code"],
+            condition=Q(active=True), name="unique_active_historical_source")]
+
+
+class HistoricalValue(models.Model):
+    import_batch = models.ForeignKey(HistoricalImport, related_name="values", on_delete=models.CASCADE)
+    row_code = models.CharField(max_length=120)
+    row_label = models.CharField(max_length=240)
+    period = models.CharField(max_length=40)
+    month = models.PositiveSmallIntegerField(null=True, blank=True)
+    unit = models.CharField(max_length=20)
+    value_int = models.BigIntegerField(default=0)
+    ratio_num = models.BigIntegerField(null=True, blank=True)
+    ratio_den = models.BigIntegerField(null=True, blank=True)
+    source_sheet = models.CharField(max_length=120)
+    source_cell = models.CharField(max_length=20)
+    source_formula = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["import_batch", "row_code", "period"], name="unique_historical_cell")]
+
+
 class NormalizedValue(models.Model):
     class Unit(models.TextChoices):
         MONEY = "MONEY", "金额"
@@ -166,6 +208,7 @@ class NormalizedValue(models.Model):
     RATIO = Unit.RATIO
 
     upload = models.ForeignKey(UploadVersion, on_delete=models.CASCADE)
+    history_import = models.ForeignKey(HistoricalImport, null=True, blank=True, on_delete=models.PROTECT)
     report_code = models.CharField(max_length=40)
     row_code = models.CharField(max_length=120)
     row_label = models.CharField(max_length=240, blank=True)

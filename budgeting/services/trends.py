@@ -304,7 +304,7 @@ def _load_rows(uploads, metric, report_code):
             codes.add(code)
     if not codes:
         return {}
-    rows = NormalizedValue.objects.filter(upload_id__in=upload_ids, report_code=report_code, row_code__in=codes).select_related("upload__cycle")
+    rows = NormalizedValue.objects.filter(upload_id__in=upload_ids, report_code=report_code, row_code__in=codes).select_related("upload__cycle", "history_import")
     grouped = defaultdict(list)
     for row in rows:
         grouped[row.upload_id].append(row)
@@ -421,7 +421,8 @@ def _source_detail(row):
         "source_cell": row.source_cell,
         "source_formula": row.source_formula or "",
         "upload_id": str(row.upload_id),
-        "upload_name": row.upload.original_name or row.upload.original_path,
+        "upload_name": row.history_import.original_name if row.history_import_id else (row.upload.original_name or row.upload.original_path),
+        "history_import_id": str(row.history_import_id) if row.history_import_id else None,
         "upload_created_at": row.upload.created_at.isoformat() if row.upload.created_at else None,
     }
 
@@ -458,7 +459,7 @@ def build_drilldown(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WI
             "project_code": pc.project.code,
             "project_name": pc.project.name,
             "upload_id": str(pc.current_upload_id),
-            "upload_name": pc.current_upload.original_name or pc.current_upload.original_path,
+            "upload_name": (source_rows[0].history_import.original_name if source_rows and source_rows[0].history_import_id else (pc.current_upload.original_name or pc.current_upload.original_path)),
             "upload_created_at": pc.current_upload.created_at.isoformat() if pc.current_upload.created_at else None,
             "value": value,
             "value_raw": _exact_value(value),

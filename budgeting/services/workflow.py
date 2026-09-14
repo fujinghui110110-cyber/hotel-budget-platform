@@ -173,7 +173,10 @@ def process_upload(upload):
         return False
     if upload.cycle.source_budget_year:
         from budgeting.services.legacy_rehearsal import process_legacy_rehearsal
-        return process_legacy_rehearsal(upload, source_path, run)
+        result = process_legacy_rehearsal(upload, source_path, run)
+        from budgeting.services.historical_data import sync_history
+        sync_history(upload)
+        return result
     for issue in [*validate_xlsx_zip(source_path), *validate_upload_contract(upload, source_path)]:
         severity, code, message, location, actual_value, expected_value = _issue_parts(issue)
         ValidationIssue.objects.create(
@@ -207,10 +210,12 @@ def process_upload(upload):
     count = extract_report_values(upload, recalculated, validation_run=run)
     if not _load_manifest(upload).get("management_v2") or _load_manifest(upload).get("management_v3"):
         extract_sub_table_values(upload, recalculated)
-    extract_management_values(upload, recalculated, validation_run=run)
+    extract_management_values(upload, recalculated, validation_run=run, include_history=False)
     if _load_manifest(upload).get("management_v3"):
         extract_supplementary_values(upload, recalculated)
         validate_channel_values(recalculated, run)
+    from budgeting.services.historical_data import sync_history
+    sync_history(upload)
     if _load_manifest(upload).get("management_v2"):
         validate_management_values(upload, run)
     upload.recalculated_path = str(recalculated.relative_to(settings.BUDGET_STORAGE_ROOT))
@@ -1096,6 +1101,7 @@ def _copy_reopen_baseline(source, new_cycle, actor=None):
         [
             NormalizedValue(
                 upload=copied,
+                history_import_id=value.history_import_id,
                 report_code=value.report_code,
                 row_code=value.row_code,
                 row_label=value.row_label,
@@ -1146,6 +1152,8 @@ def _copy_reopen_baseline(source, new_cycle, actor=None):
         cycle=new_cycle,
         upload=copied,
     )
+    from budgeting.services.historical_data import sync_history
+    sync_history(copied)
     return copied
 
 

@@ -1,3 +1,4 @@
+from django.db.models import Q
 from urllib.parse import urlencode
 
 from django.contrib.auth.decorators import login_required
@@ -5,7 +6,7 @@ from django.core.paginator import Paginator
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 
-from budgeting.models import BudgetCycle, Project, UploadVersion, REPORTS
+from budgeting.models import BudgetCycle, Project, UploadVersion, REPORTS, HistoricalImport
 from budgeting.services.data_read_audit import build_upload_audit
 
 
@@ -56,7 +57,19 @@ def data_audit(request):
     page = Paginator(issues, 80).get_page(request.GET.get("page"))
     params = request.GET.copy()
     params.pop("page", None)
+    history_batches = HistoricalImport.objects.filter(project__in=projects).filter(
+        Q(active=True) | Q(confirmed_at__isnull=True)).select_related("project")
+    if selected_project:
+        history_batches = history_batches.filter(project=selected_project)
+    if cycle:
+        history_batches = history_batches.filter(data_year__lt=cycle.budget_year, data_year__gte=cycle.budget_year-3)
+    history_rows = []
+    for batch in history_batches[:100]:
+        mapping = batch.proposal.get("confirmed_mapping", {})
+        skipped = [row["source_label"] for row in batch.proposal.get("rows", []) if batch.confirmed_at and not mapping.get(row["source_key"])]
+        history_rows.append({"batch": batch, "issues": batch.proposal.get("issues", []), "skipped": skipped})
     return render(request, "budgeting/data_audit.html", {
+        "history_rows": history_rows,
         "cycle": cycle, "cycles": cycles, "project_rows": project_rows,
         "selected_project": selected_project, "upload": selected_upload,
         "audit": selected_audit, "issue_page": page, "reasons": reasons, "reports": reports,

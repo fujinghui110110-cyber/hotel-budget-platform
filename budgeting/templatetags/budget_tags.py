@@ -9,6 +9,12 @@ from budgeting.services.drivers import driver_value_label, format_cascade_value
 register = template.Library()
 
 AUDIT_ACTIONS = {
+    "HISTORY_PREVIEW": "历史损益上传预览",
+    "HISTORY_CONFIRMED": "确认历史损益数据",
+    "ADMIN_BATCH_UPLOAD": "管理员批量上传预算",
+    "BATCH_UPLOAD_PREFLIGHT": "批量预算文件预检",
+    "BATCH_UPLOAD_ENQUEUED": "批量预算文件已接收",
+    "BATCH_UPLOAD_FAILED": "批量预算文件未接收",
     "UPLOAD_RECEIVED": "上传接收",
     "UPLOAD_SUBMITTED": "提交复核",
     "UPLOAD_APPROVED": "批准版本",

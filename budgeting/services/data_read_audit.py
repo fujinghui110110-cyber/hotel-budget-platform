@@ -11,7 +11,7 @@ from budgeting.models import NormalizedValue, REPORTS
 from budgeting.services.legacy_rehearsal import _columns, _key, _number, _row_matches
 from budgeting.services.workbook_reference import WorkbookReferenceError, read_workbook
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 REASONS = {
     'REPORT_MISSING': '未找到汇总报表',
     'REPORT_EMPTY': '汇总报表没有数据',
@@ -96,7 +96,7 @@ def build_upload_audit(upload, *, refresh=False):
         reports = {k: v for k, v in reports.items() if k in REPORTS}
         sheets = {_key(s['name']): s for s in workbook['sheets']}
         normalized = set(NormalizedValue.objects.filter(upload=upload).values_list('report_code', 'row_code', 'period'))
-        dimensions = set(NormalizedValue.objects.filter(upload=upload).values_list('report_code', 'data_year', 'data_kind'))
+        dimensions = set(NormalizedValue.objects.filter(upload=upload, history_import__isnull=False).values_list('report_code', 'data_year', 'data_kind'))
         legacy = bool(manifest.get('legacy_rehearsal'))
         for report_code, report in reports.items():
             report_count += 1
@@ -112,7 +112,7 @@ def build_upload_audit(upload, *, refresh=False):
             if report_code in base.get('reports', {}):
                 for year, kind, title in [(upload.cycle.budget_year-3, 'ACTUAL', '实际'), (upload.cycle.budget_year-2, 'ACTUAL', '实际'), (upload.cycle.budget_year-1, 'FORECAST', '预测')]:
                     if (report_code, year, kind) not in dimensions:
-                        issues.append(_issue('PERIOD_MISSING', report_code, period=f'{year}{title}', sheet=sheet_name, detail=f'系统未读取到{year}年{title}数据；请核对原表是否包含该年度及实际/预测标识，不能用其他期间替代。'))
+                        issues.append(_issue('PERIOD_MISSING', report_code, period=f'{year}{title}', sheet=sheet_name, detail=f'系统未读取到{year}年{title}数据；请管理员在“历史损益数据”单独上传并确认该年度口径，不应要求项目在预算底稿中补填历史数据。'))
             if not mapping:
                 issues.append(_issue('MAPPING_MISSING', report_code, sheet=sheet_name, detail='该报表没有可用科目映射。'))
                 continue

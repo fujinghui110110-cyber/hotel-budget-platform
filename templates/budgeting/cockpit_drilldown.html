@@ -36,6 +36,7 @@
               <div class="cockpit-source">
                 <span class="cockpit-source-label"><strong>{{ source.row_label }}</strong>（{{ source.row_code }}）</span>
                 <span class="cockpit-source-cell-ref">{{ source.source_sheet }}!{{ source.source_cell }}</span>
+                {% if source.history_import_id %}<a href="{% url 'history_review' source.history_import_id %}">历史损益来源：{{ source.upload_name }}</a>{% endif %}
                           <span class="cockpit-source-formula">{{ source.source_formula|default:"无公式" }}</span>
                           <span class="cockpit-source-value"><strong class="cockpit-source-amount">{{ source.display }}</strong>{% if source.value_raw %}<small class="cockpit-source-raw">（原始 {{ source.value_raw }}）</small>{% endif %}</span>
                           <a class="cockpit-cell-link" href="{% url 'cockpit_question_new' %}?value_id={{ source.value_id }}&amp;cycle={{ cycle.id }}">提问</a>

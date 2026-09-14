@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}确认历史科目匹配 · 酒店预算系统{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/imports.css' %}?v=20260914-1">{% endblock %}
+{% block content %}<div class="import-workspace">
+<section class="page-heading"><div><h1>{% if batch.confirmed_at %}历史损益数据{% else %}确认科目匹配{% endif %}</h1><p>{{ batch.project.name }} · {{ batch.data_year }} {{ batch.get_data_kind_display }} · {{ report_name }} · 原表单位：{% if batch.money_unit == 'wan' %}万元{% else %}元{% endif %}</p><p>{{ batch.original_name }}</p></div><div class="import-actions"><a class="button button--secondary" href="{% url 'history_management' %}">返回历史数据</a> <a class="button button--secondary" href="{% url 'history_original' batch.pk %}">下载原件</a></div></section>
+{% if batch.proposal.issues %}<section class="panel" style="padding:24px;margin:20px 0"><h2>读取提醒</h2><ul>{% for issue in batch.proposal.issues %}<li>{% if issue.source_label %}<strong>{{ issue.source_label }}</strong>：{% endif %}{{ issue.message|default:issue }}{% if issue.location %}（{{ issue.location }}）{% endif %}</li>{% endfor %}</ul><p>空值或公式未保存计算结果均保留为缺失，不会按零补齐。</p></section>{% endif %}
+<section class="panel" style="padding:24px">
+{% if batch.confirmed_at %}
+<h2>{% if batch.active %}已确认生效{% else %}已被新文件替换{% endif %}</h2><p>确认时间：{{ batch.confirmed_at }}。修改历史数据请重新上传并确认。</p>
+<div class="table-scroll"><table><thead><tr><th>系统科目</th><th>期间</th><th>数值</th><th>来源</th></tr></thead><tbody>
+{% for value in values %}<tr><td>{{ value.row_label }}</td><td>{% if value.month %}{{ value.month }}月{% else %}全年{% endif %}</td><td>{{ value.display }}</td><td>{{ value.source_sheet }}!{{ value.source_cell }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}
+<h2>原科目与系统科目</h2><p>高置信度匹配已预选。低置信度、重名科目请改选或保留“不导入”；同一系统科目只能选择一次。确认会完整替换本项目所选年度、口径的历史报表。</p>
+<form method="post">{% csrf_token %}<div class="table-scroll"><table><thead><tr><th>原科目</th><th>匹配建议</th><th>系统科目</th><th>读取情况</th></tr></thead><tbody>
+{% for row in rows %}<tr><td>{{ row.source_label }}<small style="display:block;color:#667085">{{ row.source_key }}</small></td><td>{% for candidate in row.candidates|slice:":3" %}{{ candidate.row_label }}（{{ candidate.score|floatformat:2 }}）<br>{% endfor %}</td><td><select name="{{ row.field }}" aria-label="{{ row.source_label }}映射"><option value="">不导入</option>{% for item in canonical %}<option value="{{ item.row_code }}"{% if row.selected == item.row_code %} selected{% endif %}>{{ item.row_label }} · {{ item.row_code }}</option>{% endfor %}</select></td><td>{{ row.value_count }} 个数值<details><summary>查看读取值</summary>{% for value in row.preview %}<div>{% if value.month %}{{ value.month }}月{% else %}全年{% endif %}：{{ value.display }} · {{ value.source_cell }}</div>{% endfor %}</details></td></tr>{% endfor %}
+</tbody></table></div><button class="button button--primary" style="margin-top:20px">确认匹配并导入历史数据</button></form>
+{% endif %}
+</section>
+</div>{% endblock %}
