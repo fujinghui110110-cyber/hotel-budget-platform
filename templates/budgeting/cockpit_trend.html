@@ -3,7 +3,7 @@
 {% block title %}趋势分析 · 酒店预算与损益管理平台{% endblock %}
 {% block breadcrumb %}<span>管理端</span><span aria-hidden="true">/</span><span>趋势分析</span>{% endblock %}
 {% block content %}
-<p class="message message--info">部分科目为空或趋势缺少期间时，可查看源表是否为空、映射是否匹配。<a href="{% url 'data_audit' %}?cycle={{ cycle.pk }}{% if selected_project_id %}&project_id={{ selected_project_id }}{% endif %}">查看数据审计与原因</a></p>
+<p class="message message--info">如科目或期间缺少数据，请查看原表填报情况及科目识别结果。<a href="{% url 'data_audit' %}?cycle={{ cycle.pk }}{% if selected_project_id %}&project_id={{ selected_project_id }}{% endif %}">查看数据审计与原因</a></p>
 <link rel="stylesheet" href="{% static 'budgeting/cockpit.css' %}">
 <section class="cockpit-heading">
   <div><p class="eyebrow">预算合理性</p><h1>趋势分析</h1><p class="lede">滚动窗口：B-3、B-2 实际；B-1 预测；B 预算。</p></div>
@@ -20,7 +20,7 @@
     </select>
     <label for="trend-metric">指标</label>
     <select id="trend-metric" name="metric">
-      {% for item in metric_choices %}<option value="{{ item.code }}" {% if item.code == metric_code %}selected{% endif %}>{{ item.label }}{% if not item.available %}（暂无映射）{% endif %}</option>{% endfor %}
+      {% for item in metric_choices %}<option value="{{ item.code }}" {% if item.code == metric_code %}selected{% endif %}>{{ item.label }}{% if not item.available %}（尚未识别来源）{% endif %}</option>{% endfor %}
     </select>
     <label for="trend-project">项目</label>
     <select id="trend-project" name="project_id">

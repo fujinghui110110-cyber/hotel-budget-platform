@@ -16,6 +16,7 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment, Font, PatternFill
 
+from budgeting.services.project_scope import cycle_projects
 from budgeting.models import BudgetCycle, NormalizedValue, Project, REPORTS, UploadVersion
 from budgeting.services.budget_versions import REPORTABLE_UPLOAD_STATUSES, selected_project_upload
 from budgeting.services.report_labels import report_row_labels
@@ -37,7 +38,7 @@ class VersionReportArchive:
 
 def usable_uploads(cycle: BudgetCycle, project_ids: Sequence[int] | None = None):
 
-    projects = Project.objects.filter(is_active=True).order_by("code")
+    projects = cycle_projects(cycle)
     if project_ids is not None:
         try:
             ids = [int(value) for value in project_ids]

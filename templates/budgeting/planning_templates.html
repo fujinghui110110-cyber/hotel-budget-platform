@@ -2,15 +2,25 @@
 {% block title %}模板与填报 · 酒店预算系统{% endblock %}
 {% block breadcrumb %}<span>模板与填报</span>{% endblock %}
 {% block content %}
-<section class="planning-heading"><div><h1>模板与填报</h1><p>统一预算模板、项目下载入口与填报审批工作区。管理员也可批量导入项目底稿。</p></div><a class="button button--primary" href="{% url 'management_projects' %}">进入填报审批</a><a class="button button--secondary" href="{% url 'management_batch_upload' %}">批量上传预算</a></section>
+<section class="planning-heading"><div><h1>模板与填报</h1><p>按预算版本发布填报模板，项目下载后填写并提交。</p></div><a class="button button--primary" href="{% url 'management_projects' %}">查看项目预算</a><a class="button button--secondary" href="{% url 'management_batch_upload' %}">批量上传预算</a></section>
+
 <section class="template-layout">
-  <article class="panel template-hero"><span class="eyebrow">当前周期模板</span><h2>{% if template %}{{ template.name|default:template.version }}{% else %}尚未配置模板{% endif %}</h2><p>{{ source_note|default:"标准模板由预算周期统一控制，项目下载后按原结构填报并上传。" }}</p>{% if has_template %}{% if template.is_active %}<span class="status status--approved">已启用</span>{% else %}<span class="status status--pending">试填模板</span>{% endif %}{% else %}<span class="status status--pending">待配置</span>{% endif %}</article>
-  <article class="panel"><div class="section-heading"><div><h2>项目模板下载</h2><p>{% if cycle %}{{ cycle.name }} · {{ cycle.budget_year }}预算{% endif %}</p></div><form method="get"><label class="compact-field">周期<select name="cycle" onchange="this.form.submit()">{% for item in cycles %}<option value="{{ item.pk }}"{% if cycle and item.pk == cycle.pk %} selected{% endif %}>{{ item.name }}</option>{% endfor %}</select></label></form></div><div class="template-downloads">{% for item in downloads %}<div><span><strong>{{ item.project.code }} {{ item.project.name }}</strong><small>项目专用标准预算模板</small></span><a class="button button--small" href="{{ item.url }}">下载模板</a></div>{% empty %}<p class="empty-state">当前周期暂无可下载模板。</p>{% endfor %}</div></article>
+<article class="panel template-hero"><span class="eyebrow">{% if distributed %}已发布填报模板{% else %}系统标准模板{% endif %}</span>
+<h2>{% if distributed %}{{ distributed.name }}{% elif has_template %}{{ cycle.budget_year }} 年预算填报模板{% else %}尚未发布模板{% endif %}</h2>
+{% if distributed %}<p>发布时间：{{ distributed.created_at|date:"Y-m-d H:i" }}</p>{% endif %}
+<p>项目按当前预算版本下载、填写并提交。识别结果可在“数据审计”查看。</p>
+{% if cycle and cycle.status != 'FROZEN' %}
+<details{% if not distributed %} open{% endif %}><summary>{% if distributed %}更新填报模板{% else %}发布填报模板{% endif %}</summary><form method="post" enctype="multipart/form-data">{% csrf_token %}
+<p><label for="template-name">模板名称（选填）</label><input id="template-name" name="template_name" maxlength="120" placeholder="例如：年度预算填报表"></p>
+<p><label for="template-file">上传填报模板</label><input id="template-file" type="file" name="template_file" accept=".xlsx,.xlsm" required></p>
+<p class="muted">请上传空白填报表，保留汇总科目和公式，可增加附表。支持 .xlsx、.xlsm，最大 30 MB，不含宏或外部连接。旧版文件将保留。</p>
+<button class="button button--primary" type="submit">发布到当前预算版本</button>
+</form></details>
+{% elif cycle %}<p>该预算版本已归档，模板不再变更。</p>{% else %}<p>请先在预算版本中创建一个版本。</p>{% endif %}
+</article>
+<article class="panel"><div class="section-heading"><div><h2>项目模板下载</h2><p>{% if cycle %}{{ cycle.budget_year }} 年 · R{{ cycle.revision_no }}{% endif %}</p></div></div>
+<div class="template-downloads">{% for item in downloads %}<div class="template-download-row"><span><strong>{{ item.project.name }}</strong><small>当前预算版本填报模板</small></span><a class="button button--ghost button--small" href="{{ item.url }}">下载模板</a></div>{% empty %}<p class="empty-state">发布模板并设置适用项目后，即可下载。</p>{% endfor %}</div></article>
 </section>
-<section class="panel">
-  <div class="section-heading">
-    <div><h2>预算底稿导出</h2><p>管理员可按预算周期下载当前批准版本或明确选择最新上传版本。</p></div>
-    <a class="button button--ghost" href="{% url 'management_workpaper_exports' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}">进入底稿导出</a>
-  </div>
-</section>
+{% if template_history %}<section class="panel"><h2>发布记录</h2><p>以下记录用于核对模板变更，项目下载最新发布的文件。</p><table><thead><tr><th>模板名称</th><th>发布时间</th><th>发布人</th></tr></thead><tbody>{% for item in template_history %}<tr><td>{{ item.name }}</td><td>{{ item.created_at|date:"Y-m-d H:i" }}</td><td>{{ item.uploaded_by.get_full_name|default:item.uploaded_by.username }}</td></tr>{% endfor %}</tbody></table></section>{% endif %}
+<section class="panel"><div class="section-heading"><div><h2>预算底稿导出</h2><p>按预算版本下载项目底稿，也可一次导出全部项目。</p></div><a class="button button--ghost" href="{% url 'management_workpaper_exports' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}">导出预算底稿</a></div></section>
 {% endblock %}

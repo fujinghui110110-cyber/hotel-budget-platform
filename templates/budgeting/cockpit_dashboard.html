@@ -19,6 +19,8 @@
       <p class="lede">{% if cycle %}{{ cycle.name }}{% else %}暂无开放预算周期{% endif %}</p>
     </div>
     <div class="cockpit-actions">
+      {% url 'management_metrics' as management_metrics_url %}
+      {% if management_metrics_url %}<a class="button button--secondary" href="{{ management_metrics_url }}?{% if cycle %}cycle={{ cycle.pk }}&amp;{% endif %}report_code={{ report_code|urlencode }}">经营指标与历史对比</a>{% endif %}
       <a class="button button--secondary" href="{{ report_catalog_url }}">全部报表</a>
       {% if ref_url %}<a class="button button--ghost" href="{{ ref_url }}">真实项目历史原表</a>{% endif %}
       <a class="button button--ghost" href="{% url 'cockpit_trend' %}?report_code={{ report_code|urlencode }}">趋势分析</a>

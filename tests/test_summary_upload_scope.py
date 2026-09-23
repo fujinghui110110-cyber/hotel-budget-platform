@@ -66,6 +66,13 @@ class SummaryUploadScopeTests(SimpleTestCase):
         issues = validate_upload_contract(self.upload, self.uploaded)
         self.assertTrue(any(issue[0] == 'P0' and issue[1] == 'FORMULA_FINGERPRINT' for issue in issues))
 
+    def test_excel_equivalent_formula_spelling_passes_upload_contract(self):
+        workbook = load_workbook(self.uploaded)
+        workbook[next(iter(REPORTS.values()))]['C1'] = '=B01*02'
+        workbook.save(self.uploaded)
+        issues = validate_upload_contract(self.upload, self.uploaded)
+        self.assertFalse([issue for issue in issues if issue[0] == 'P0'])
+
     def test_summary_cached_error_still_blocks(self):
         workbook = load_workbook(self.uploaded)
         workbook[next(iter(REPORTS.values()))]['B1'] = '#REF!'

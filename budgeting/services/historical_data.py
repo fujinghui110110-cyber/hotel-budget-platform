@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from budgeting.models import BudgetCycle, HistoricalImport, HistoricalValue, NormalizedValue, Project, UploadVersion
 from budgeting.services.workflow import active_template, audit
+from budgeting.services.template_paths import resolve_template_path
 
 VALUE_FIELDS = ("row_code", "row_label", "period", "month", "unit", "value_int",
                 "ratio_num", "ratio_den", "source_sheet", "source_cell", "source_formula")
@@ -21,9 +22,7 @@ def canonical_rows(report_code):
     template = active_template()
     result = {}
     if template:
-        path = Path(template.manifest_path)
-        if not path.is_absolute():
-            path = Path(settings.BASE_DIR) / path
+        path = resolve_template_path(template.manifest_path)
         manifest = json.loads(path.read_text())
         for item in manifest.get("reports", {}).get(report_code, {}).get("mapping", []):
             result[item["row_code"]] = {key: item.get(key, "") for key in ("row_code", "row_label", "unit", "aggregation")}
@@ -67,31 +66,32 @@ def stage_history(project, file, actor, data_year, data_kind, report_code, money
 
 @transaction.atomic
 def sync_history(upload):
-    """Refresh historical read caches; frozen budget snapshots are immutable."""
-    cycle = BudgetCycle.objects.select_for_update().get(pk=upload.cycle_id)
-    if cycle.status == BudgetCycle.Status.FROZEN:
+    """Read the upload's pinned baseline only; never retarget a prior upload."""
+    cycle = BudgetCycle.objects.get(pk=upload.cycle_id)
+    upload.refresh_from_db()
+    if cycle.status == BudgetCycle.Status.FROZEN or upload.status in (UploadVersion.APPROVED, UploadVersion.SUPERSEDED):
         return
-    Project.objects.select_for_update().get(pk=upload.project_id)
+    if not upload.history_binding_id or upload.history_stale:
+        return
+    binding = upload.history_binding
+    if binding.project_id != upload.project_id or binding.plan_id != cycle.plan_id:
+        raise ValueError("上传历史基准与项目或年度计划不一致。")
     NormalizedValue.objects.filter(upload=upload, data_kind__in=["ACTUAL", "FORECAST"]).delete()
-    batches = HistoricalImport.objects.filter(project_id=upload.project_id, active=True).prefetch_related("values")
-    for batch in batches:
-        if batch.data_year >= cycle.budget_year:
-            continue
-        # A confirmed file replaces the full selected report/year/kind, including blank subjects.
-        NormalizedValue.objects.bulk_create([
-            NormalizedValue(upload=upload, history_import=batch, report_code=batch.report_code,
-                            data_year=batch.data_year, data_kind=batch.data_kind,
-                            **{field: getattr(value, field) for field in VALUE_FIELDS})
-            for value in batch.values.all()
-        ])
+    NormalizedValue.objects.bulk_create([
+        NormalizedValue(upload=upload, processing_run_id=upload.processing_current_run_id,
+                        report_code=value.report_code, row_code=value.row_code, period=value.period,
+                        data_year=value.data_year, data_kind=value.data_kind, unit=value.unit,
+                        value_int=value.value_int, ratio_num=value.ratio_num, ratio_den=value.ratio_den,
+                        source_sheet=value.source_sheet, source_cell=value.source_cell,
+                        month=int(value.period[-2:]) if len(value.period) > 5 and value.period[-3] == 'M' else None)
+        for value in binding.baseline.values.filter(data_year__lt=cycle.budget_year)
+    ])
 
 
 @transaction.atomic
-def confirm_history(batch, selections, actor):
+def confirm_history(batch, selections, actor, *, plan=None, reason="", expected_revision=None, affected_plan_ids=None, include_legacy=False, legacy_import_ids=None):
     if not actor.is_admin_role:
         raise ValueError("仅管理员可以确认历史损益数据。")
-    # Use the same cycle -> project lock ordering as sync_history.
-    cycles = list(BudgetCycle.objects.select_for_update().exclude(status=BudgetCycle.Status.FROZEN))
     Project.objects.select_for_update().get(pk=batch.project_id)
     batch = HistoricalImport.objects.select_for_update().get(pk=batch.pk)
     if batch.confirmed_at:
@@ -124,16 +124,49 @@ def confirm_history(batch, selections, actor):
             ))
     if not values:
         raise ValueError("请至少选择一个有可读取数值的科目。")
-    HistoricalImport.objects.filter(project=batch.project, data_year=batch.data_year,
-                                    data_kind=batch.data_kind, report_code=batch.report_code, active=True).update(active=False)
+    from budgeting.models import HistoryBaseline, PlanProject
+    from budgeting.services.plan_history import confirm_history as confirm_baseline, VALUE_FIELDS as BASELINE_FIELDS
+    if plan is None or expected_revision is None or not reason.strip():
+        raise ValueError("请选择预算年度并填写确认理由，历史版本必须在确认页面重新核对。")
+    if batch.data_year >= plan.budget_year:
+        raise ValueError("历史数据年度必须早于预算年度。")
+    if not PlanProject.objects.filter(plan=plan, project=batch.project).exists():
+        raise ValueError("项目不在所选年度计划内。")
+    previous = HistoryBaseline.objects.filter(project=batch.project).order_by('-revision').first()
+    key_fields = ('report_code', 'row_code', 'data_year', 'data_kind', 'period')
+    merged = {tuple(row[k] for k in key_fields): row for row in previous.values.values(*BASELINE_FIELDS)} if previous else {}
+    legacy_ids = []
+    if include_legacy:
+        requested_ids = set(str(value) for value in (legacy_import_ids or []))
+        legacy_batches = list(HistoricalImport.objects.filter(pk__in=requested_ids,project=batch.project, active=True, confirmed_at__isnull=False).prefetch_related('values'))
+        if not requested_ids or {str(item.pk) for item in legacy_batches} != requested_ids:
+            raise ValueError("待复核旧历史文件已变化，请刷新页面重新核对。")
+        for legacy in legacy_batches:
+            legacy_ids.append(str(legacy.pk))
+            for value in legacy.values.all():
+                row = {field: getattr(value, field) for field in BASELINE_FIELDS if field not in ('report_code','data_year','data_kind')}
+                row.update(report_code=legacy.report_code,data_year=legacy.data_year,data_kind=legacy.data_kind)
+                key = tuple(row[k] for k in key_fields)
+                # A legacy import cannot override an already locked baseline implicitly.
+                merged.setdefault(key, row)
+    for value in values:
+        row = {field: getattr(value, field) for field in BASELINE_FIELDS if field not in ('report_code','data_year','data_kind')}
+        row.update(report_code=batch.report_code,data_year=batch.data_year,data_kind=batch.data_kind)
+        merged[tuple(row[k] for k in key_fields)] = row
+    baseline = confirm_baseline(plan=plan, project=batch.project, values=list(merged.values()), actor=actor,
+        reason=reason, expected_revision=expected_revision, affected_plan_ids=affected_plan_ids,
+        source_identity={'import_id':str(batch.pk),'sha256':batch.sha256,'original_name':batch.original_name,
+                         'reconfirmed_legacy_import_ids':legacy_ids})
+    HistoricalImport.objects.filter(project=batch.project, data_year=batch.data_year, data_kind=batch.data_kind,
+        report_code=batch.report_code, active=True).update(active=False)
     HistoricalValue.objects.bulk_create(values)
-    batch.proposal["confirmed_mapping"] = selections
+    batch.proposal['confirmed_mapping'] = selections
+    batch.proposal['history_baseline_id'] = baseline.pk
+    batch.proposal['confirmation_reason'] = reason
     batch.active = True
     batch.confirmed_at = timezone.now()
-    batch.save(update_fields=["active", "confirmed_at", "proposal"])
-    for upload in UploadVersion.objects.filter(project=batch.project, cycle_id__in=[c.pk for c in cycles]):
-        sync_history(upload)
-    audit(actor, "HISTORY_CONFIRMED", "HistoricalImport", batch.pk,
-          {"rows": len(used), "values": len(values), "year": batch.data_year, "kind": batch.data_kind},
-          project=batch.project)
+    batch.save(update_fields=['active','confirmed_at','proposal'])
+    audit(actor, 'HISTORY_CONFIRMED', 'HistoricalImport', batch.pk,
+          {'rows':len(used),'values':len(values),'year':batch.data_year,'kind':batch.data_kind,
+           'baseline_id':baseline.pk,'reason':reason}, project=batch.project)
     return batch

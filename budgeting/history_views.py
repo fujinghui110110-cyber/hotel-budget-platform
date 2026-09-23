@@ -8,7 +8,8 @@ from django.http import FileResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from budgeting.cockpit_views import admin_required
-from budgeting.models import HistoricalImport, REPORTS
+from budgeting.models import HistoricalImport, REPORTS, BudgetPlan, PlanProject, PlanHistoryBinding, HistoryBaseline
+from django.core.exceptions import ValidationError
 from budgeting.services.historical_data import stage_history, confirm_history
 
 
@@ -52,6 +53,11 @@ def history_management(request):
 @admin_required
 def history_review(request, batch_id):
     batch = get_object_or_404(HistoricalImport.objects.select_related("project"), pk=batch_id)
+    plans = BudgetPlan.objects.filter(planproject__project=batch.project, budget_year__gt=batch.data_year).order_by('-budget_year')
+    previous = HistoryBaseline.objects.filter(project=batch.project).order_by('-revision').first()
+    affected_ids = set(PlanHistoryBinding.objects.filter(project=batch.project).values_list('plan_id', flat=True))
+    affected_plans = BudgetPlan.objects.filter(pk__in=affected_ids).order_by('budget_year')
+    legacy = HistoricalImport.objects.filter(project=batch.project,active=True,confirmed_at__isnull=False).exclude(pk=batch.pk)
     rows = []
     for index, original in enumerate(batch.proposal.get("rows", [])):
         row = dict(original)
@@ -62,15 +68,24 @@ def history_review(request, batch_id):
         rows.append(row)
     if request.method == "POST":
         try:
-            confirm_history(batch, {row["source_key"]: row["selected"] for row in rows}, request.user)
-            messages.success(request, "历史损益数据已确认生效，已同步到未冻结预算版本的总览、报表、趋势和测算。")
+            plan = get_object_or_404(plans, pk=request.POST.get('plan'))
+            selected_affected = {int(value) for value in request.POST.getlist('affected_plan_ids')}
+            selected_affected.add(plan.pk)
+            if request.POST.get('confirm_impact') != 'yes':
+                raise ValueError('请确认历史修订影响和旧底稿重新校验要求。')
+            confirm_history(batch, {row["source_key"]: row["selected"] for row in rows}, request.user,
+                plan=plan,reason=request.POST.get('reason',''),expected_revision=int(request.POST.get('expected_revision','-1')),
+                affected_plan_ids=selected_affected,include_legacy=request.POST.get('include_legacy')=='yes',
+                legacy_import_ids=request.POST.getlist('legacy_import_ids'))
+            messages.success(request, "历史基准新版本已确认；旧批准版本与快照保持原状，相关待批底稿须重新校验。")
             return redirect("history_review", batch_id=batch.pk)
-        except ValueError as exc:
-            messages.error(request, str(exc))
+        except (ValueError, ValidationError) as exc:
+            messages.error(request, "；".join(exc.messages) if isinstance(exc, ValidationError) else str(exc))
     values = list(batch.values.all().order_by("row_code", "period")) if batch.confirmed_at else []
     for value in values:
         value.display = _display(value)
     return render(request, "budgeting/history_review.html", {
+        "plans": plans, "affected_plans": affected_plans, "previous": previous, "expected_revision": previous.revision if previous else 0, "legacy": legacy,
         "batch": batch, "rows": rows, "canonical": batch.proposal.get("canonical", []),
         "values": values,
         "report_name": REPORTS.get(batch.report_code, batch.report_code),

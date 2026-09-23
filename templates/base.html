@@ -1,4 +1,5 @@
-{% load static %}
+{% load static budget_navigation %}
+{% budget_navigation as budget_nav %}
 <!doctype html>
 <html lang="zh-hans">
 <head>
@@ -20,16 +21,26 @@
       </a>
       {% if user.is_admin_role %}
       <nav class="side-nav">
-        <a href="/management/planning/{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if request.resolver_match.url_name == 'planning_overview' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/layout-dashboard.svg' %}" alt="">预算总览</a>
-        <a href="{% url 'management_version_report' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if request.resolver_match.url_name == 'planning_projects' or 'version_report' in request.resolver_match.url_name or request.resolver_match.url_name == 'management_report' or request.resolver_match.url_name == 'report_catalog' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/building-2.svg' %}" alt="">项目预算</a>
-        <a href="{% url 'summary_list' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if 'scenario' in request.resolver_match.url_name or 'summary' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calculator.svg' %}" alt="">预算测算</a>
-        <a href="{% url 'cockpit_trend' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if 'trend' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/chart-no-axes-combined.svg' %}" alt="">收入与成本分析</a>
-      <a href="{% url 'special_indicators' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if request.resolver_match.url_name == 'special_indicators' or request.resolver_match.url_name == 'special_indicator_import' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/chart-no-axes-combined.svg' %}" alt="">专项指标对比</a>
-        <a href="{% url 'cockpit_questions' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if 'question' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/messages-square.svg' %}" alt="">审核问答</a>
-        <a href="{% url 'data_audit' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if request.resolver_match.url_name == 'data_audit' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/scroll-text.svg' %}" alt="">数据审计</a>
-      <a href="/management/templates/{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if request.resolver_match.url_name == 'planning_templates' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">模板与填报</a>
-      <a href="{% url 'management_batch_upload' %}" class="{% if request.resolver_match.url_name == 'management_batch_upload' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">批量上传预算</a>
-      <a href="{% url 'history_management' %}" class="{% if request.resolver_match.url_name == 'history_management' or request.resolver_match.url_name == 'history_review' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">历史损益数据</a>
+        <a href="/management/planning/{{ budget_nav.query }}" class="{% if request.resolver_match.url_name == 'planning_overview' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/layout-dashboard.svg' %}" alt="">年度预算总览</a>
+        <a href="{% url 'management_version_report' %}{{ budget_nav.query }}" class="{% if request.resolver_match.url_name == 'planning_projects' or request.resolver_match.url_name == 'annual_targets' or 'version_report' in request.resolver_match.url_name or request.resolver_match.url_name == 'management_report' or request.resolver_match.url_name == 'report_catalog' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/building-2.svg' %}" alt="">酒店预算</a>
+        <a href="{% url 'summary_list' %}{{ budget_nav.query }}" class="{% if 'scenario' in request.resolver_match.url_name or 'summary' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calculator.svg' %}" alt="">汇总调整与下发</a>
+        <a href="{% url 'history_management' %}{{ budget_nav.query }}" class="{% if request.resolver_match.url_name == 'history_management' or request.resolver_match.url_name == 'history_review' or request.resolver_match.url_name == 'management_freeze' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">历史基准与归档</a>
+      </nav>
+      <nav class="side-nav side-nav--secondary" aria-label="分析与填报工具">
+        {% url 'management_metrics' as management_metrics_url %}
+        {% if management_metrics_url %}<a href="{{ management_metrics_url }}{{ budget_nav.query }}" class="{% if 'management_metric' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/chart-no-axes-combined.svg' %}" alt="">经营指标分析</a>{% endif %}
+        <span class="side-nav__caption">分析与填报工具</span>
+        <a href="{% url 'cockpit_trend' %}{{ budget_nav.query }}" class="{% if 'trend' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/chart-no-axes-combined.svg' %}" alt="">收入与成本分析</a>
+      <a href="{% url 'special_indicators' %}{{ budget_nav.query }}" class="{% if request.resolver_match.url_name == 'special_indicators' or request.resolver_match.url_name == 'special_indicator_import' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/chart-no-axes-combined.svg' %}" alt="">专项指标对比</a>
+        <a href="{% url 'cockpit_questions' %}{{ budget_nav.query }}" class="{% if 'question' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/messages-square.svg' %}" alt="">审核问答</a>
+        <a href="{% url 'data_audit' %}{{ budget_nav.query }}" class="{% if request.resolver_match.url_name == 'data_audit' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/scroll-text.svg' %}" alt="">数据审计</a>
+      <a href="/management/templates/{{ budget_nav.query }}" class="{% if request.resolver_match.url_name == 'planning_templates' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">模板与填报</a>
+      <a href="{% url 'management_batch_upload' %}{{ budget_nav.query }}" class="{% if request.resolver_match.url_name == 'management_batch_upload' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">批量上传预算</a>
+      </nav>
+      <nav class="side-nav side-nav--secondary" aria-label="归档与导出">
+        <span class="side-nav__caption">归档与导出</span>
+        <a href="{% url 'management_freeze' %}{{ budget_nav.query }}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">冻结与归档</a>
+        <a href="{% url 'management_workpaper_exports' %}{{ budget_nav.query }}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">批量底稿导出</a>
       </nav>
       <div class="side-nav side-nav--secondary">
         <span class="side-nav__caption">系统设置</span>
@@ -43,13 +54,15 @@
       <nav class="side-nav">
         <span class="side-nav__caption">{{ user.project.code|default:'项目端' }} · {{ user.project.name|default:'项目工作区' }}</span>
         <a href="{% url 'project_dashboard' %}" class="{% if request.resolver_match.url_name == 'project_dashboard' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/layout-dashboard.svg' %}" alt="">项目工作台</a>
+        {% annual_target_link budget_nav.plan_id user.project_id budget_nav.query as own_targets_url %}
+        {% if own_targets_url %}<a href="{{ own_targets_url }}" class="{% if request.resolver_match.url_name == 'annual_targets' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calculator.svg' %}" alt="">上级要求与达标情况</a>{% endif %}
         <a href="{% url 'project_upload_new' %}" class="{% if request.resolver_match.url_name == 'project_upload_new' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">上传预算</a>
         <a href="{% url 'project_template' %}" class="{% if request.resolver_match.url_name == 'project_template' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/file-spreadsheet.svg' %}" alt="">模板下载</a>
         <a href="{% url 'project_adjustments' %}" class="{% if request.resolver_match.url_name == 'project_adjustments' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calculator.svg' %}" alt="">调整任务</a>
         <a href="{% url 'project_history' %}" class="{% if request.resolver_match.url_name == 'project_history' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/calendar-range.svg' %}" alt="">历史版本</a>
         <a href="{% url 'project_report_catalog' %}" class="{% if 'report' in request.resolver_match.url_name %}is-active{% endif %}"><img src="{% static 'vendor/lucide/chart-no-axes-combined.svg' %}" alt="">全部报表</a>
-      <a href="{% url 'special_indicators' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if request.resolver_match.url_name == 'special_indicators' or request.resolver_match.url_name == 'special_indicator_import' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/chart-no-axes-combined.svg' %}" alt="">专项指标对比</a>
-      <a href="{% url 'data_audit' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}" class="{% if request.resolver_match.url_name == 'data_audit' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/scroll-text.svg' %}" alt="">数据审计</a>
+      <a href="{% url 'special_indicators' %}{{ budget_nav.query }}" class="{% if request.resolver_match.url_name == 'special_indicators' or request.resolver_match.url_name == 'special_indicator_import' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/chart-no-axes-combined.svg' %}" alt="">专项指标对比</a>
+      <a href="{% url 'data_audit' %}{{ budget_nav.query }}" class="{% if request.resolver_match.url_name == 'data_audit' %}is-active{% endif %}"><img src="{% static 'vendor/lucide/scroll-text.svg' %}" alt="">数据审计</a>
     </nav>
       {% endif %}
       <div class="sidebar__account">
@@ -61,7 +74,7 @@
     <div class="app-stage">
       <header class="topbar">
         <nav class="breadcrumb" aria-label="面包屑导航">{% block breadcrumb %}<span>预算管理</span>{% endblock %}</nav>
-        <div class="topbar__meta">{% if cycle %}<form method="get" action="{{ request.path }}" class="topbar__year"><label for="global-cycle">预算版本</label>{% if cycles %}<select id="global-cycle" name="cycle" onchange="this.form.submit()">{% for item in cycles %}<option value="{{ item.pk }}"{% if item.pk == cycle.pk %} selected{% endif %}>{{ item.budget_year }} · R{{ item.revision_no }}</option>{% endfor %}</select>{% else %}<strong>{{ cycle.budget_year }} · R{{ cycle.revision_no }}</strong>{% endif %}</form>{% endif %}</div>
+        <div class="topbar__meta">{% if cycle %}<form method="get" action="{{ request.path }}" class="topbar__year"><label for="global-cycle">预算版本</label>{% if cycles %}{% for filter in budget_nav.filters %}<input type="hidden" name="{{ filter.name }}" value="{{ filter.value }}">{% endfor %}<select id="global-cycle" name="cycle" onchange="this.form.submit()">{% for item in cycles %}<option value="{{ item.pk }}"{% if item.pk == cycle.pk %} selected{% endif %}>{{ item.budget_year }} · R{{ item.revision_no }}</option>{% endfor %}</select>{% else %}<strong>{{ cycle.budget_year }} · R{{ cycle.revision_no }}</strong>{% endif %}</form>{% endif %}</div>
       </header>
   {% endif %}
       <main id="main-content" class="main-content{% if not user.is_authenticated %} main-content--auth{% endif %}">

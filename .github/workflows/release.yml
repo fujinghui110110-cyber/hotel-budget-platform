@@ -1,0 +1,58 @@
+name: Reviewed draft release
+on:
+  pull_request:
+  push:
+    branches: ["codex/real-project-browser-qa"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing reviewed version tag
+        required: true
+      policy:
+        description: Committed verified release policy path
+        required: true
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --require-hashes -r requirements-update.lock -r requirements.txt
+      - run: python manage.py test tests --noinput
+        env:
+          DATABASE_PATH: ${{ runner.temp }}/预算 空格/db.sqlite3
+          BUDGET_STORAGE_ROOT: ${{ runner.temp }}/预算 空格/storage
+  draft:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m scripts.build_system_release --output dist/budget-system-update.zip --policy "$POLICY"
+        env:
+          POLICY: ${{ inputs.policy }}
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'dist/*'
+      - run: gh release create "$TAG" dist/budget-system-update.zip dist/release-manifest.json --draft --verify-tag --title "$TAG" --notes 'Draft only. Publish after native and real workbook acceptance.'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}

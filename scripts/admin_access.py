@@ -29,7 +29,7 @@ def write_credentials(root, username, password):
                          '这是本台电脑独立生成的账号，其他电脑的旧密码不能用于这里。\n'
                          '请妥善保存此文件，不要发给项目人员，不要上传 GitHub。\n'
                          '如果后来修改过密码，以你修改后的密码为准。\n'
-                         '忘记密码时，在系统文件夹双击“修复管理员登录-Windows.bat”。\n')
+                         '忘记密码时，在系统文件夹双击“scripts/maintenance/修复管理员登录-Windows.bat”。\n')
         if sys.platform == 'win32':
             sid = subprocess.check_output(['whoami', '/user', '/fo', 'csv', '/nh'], text=True).strip().split(',')[-1].strip('"')
             result = subprocess.run(['icacls', str(path), '/inheritance:r', '/grant:r', '*' + sid + ':F', '*S-1-5-18:F'], capture_output=True)
@@ -74,7 +74,7 @@ def provision(root, *, reset_username=None):
 
 def reveal(result):
     if result is None:
-        print('已存在管理员账号，原账号和密码保持不变。忘记密码请运行“修复管理员登录-Windows.bat”。')
+        print('已存在管理员账号，原账号和密码保持不变。忘记密码请运行“scripts/maintenance/修复管理员登录-Windows.bat”。')
         return
     print('管理员账号已准备好：' + result['username'])
     print('请打开登录信息文件，复制里面的用户名和密码：' + str(result['path']))

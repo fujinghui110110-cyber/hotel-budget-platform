@@ -496,12 +496,13 @@ class UatMvpTests(TestCase):
         approve_upload(replacement, self.admin)
         self.assertEqual(ProjectCycle.objects.get(project=self.project, cycle=self.cycle).current_upload, replacement)
 
-    def test_uat_23_blocks_freeze_until_adjustments_complete_then_denies_frozen_upload_and_reopens_revision(self):
+    def test_uat_23_legacy_adjustment_review_blocks_freeze_and_explicit_targets_still_block_approval(self):
         self._current_upload(self.project, cents=10000)
         Project.objects.filter(pk=self.other_project.pk).update(is_active=False)
         batch = create_adjustment_batch(self.cycle, "PL_TOTAL_WINE", "ROOM", "01", 1, "rounding", self.admin)
         issue_adjustment(batch, self.admin)
-        self.assertIn("存在未完成调整", freeze_preconditions(self.cycle))
+        blockers = freeze_preconditions(self.cycle)
+        self.assertTrue(any("旧下发任务" in blocker for blocker in blockers))
         new_upload = self._upload(self.project, UploadVersion.VALIDATED, cents=10001, original_path="uploads/P001/adjusted.xlsx")
         (self.storage / "uploads/P001").mkdir(parents=True, exist_ok=True)
         shutil.copy2(self.template_file, self.storage / new_upload.original_path)
@@ -561,9 +562,22 @@ class UatMvpTests(TestCase):
         current = self._current_upload(self.project, cents=10000)
         batch = create_adjustment_batch(self.cycle, "PL_TOTAL_WINE", "ROOM", "01", 1, "rounding", self.admin)
         issue_adjustment(batch, self.admin)
+        from budgeting.services.plan_history import ensure_plan
+        from budgeting.services.targets import issue_targets
+        plan = ensure_plan(self.cycle)
+        issue_targets(
+            actor=self.admin, plan=plan, project=self.project, origin_cycle=self.cycle,
+            expected_plan_revision=plan.revision_token, reason="客房收入最低要求",
+            selected_target_rows=[{
+                "report_code": "PL_TOTAL_WINE", "row_code": "ROOM", "period": "01",
+                "unit": "CNY_CENT", "metric_kind": "REVENUE", "comparator": "GE",
+                "target_int": 10001, "sign_multiplier": 1,
+                "evidence": "管理员明确选定客房收入最低要求", "rule_version": "test-v1",
+            }],
+        )
         reupload = self._upload(self.project, UploadVersion.VALIDATED, cents=10000)
         submit_upload(reupload, self.user)
-        with self.assertRaisesMessage(ValueError, "精确落实"):
+        with self.assertRaisesMessage(ValueError, "TARGET_UNMET"):
             approve_upload(reupload, self.admin)
         self.assertEqual(ProjectCycle.objects.get(project=self.project, cycle=self.cycle).current_upload, current)
         line = AdjustmentLine.objects.get(batch=batch, project=self.project)

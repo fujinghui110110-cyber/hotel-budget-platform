@@ -1,0 +1,1 @@
+{% load budget_navigation %}{% budget_navigation as target_nav %}{% annual_target_link target_nav.plan_id target_project.pk target_nav.query as annual_targets_url %}{% if annual_targets_url %}<a class="text-link" href="{{ annual_targets_url }}">{% if user.is_admin_role %}年度目标与达标情况{% else %}上级要求与达标情况{% endif %}</a>{% endif %}

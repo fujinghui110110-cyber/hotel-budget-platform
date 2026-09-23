@@ -8,7 +8,7 @@
     <div>
       <p class="eyebrow">调整中心</p>
       <h1>预算统筹调整</h1>
-      <p class="lede">对单项目报表的任意叶子项做年度或月度调整，系统按模板公式自底向上联动重算派生项（总收入 / 经营毛利润 / 净利润等），并给出调整前后全表对比后下发。</p>
+      <p class="lede">调整项目的年度或月度预算，相关收入、费用和利润会按公式自动计算。核对调整前后差异后，可下发给项目。</p>
     </div>
     {% if management_projects_url %}<a class="button button--ghost" href="{{ management_projects_url }}">返回项目进度</a>{% endif %}
   </section>
@@ -18,11 +18,11 @@
   {% if cycle %}
   <details class="panel panel--collapsible" {% if not full %}open{% endif %}>
     <summary class="section-heading">
-      <div><p class="eyebrow">快速调整</p><h2>单驱动快速调整</h2></div>
+      <div><p class="eyebrow">快速调整</p><h2>关键指标快速测算</h2></div>
       <span class="muted">出租率 / 平均房价 / 房间数 / 客房收入</span>
     </summary>
     <form method="post" action="{% url 'management_adjustments' %}" class="form-stack">
-      {% csrf_token %}
+      {% csrf_token %}<input type="hidden" name="cycle" value="{{ cycle.pk }}">
       <div class="form-row">
         <div class="form-field">
           <label for="id_project">项目</label>
@@ -97,11 +97,11 @@
     <div class="section-heading">
       <div>
         <p class="eyebrow">全表调整</p>
-        <h2 id="full-worksheet-title">报表叶子项编辑与全盘联动</h2>
+        <h2 id="full-worksheet-title">预算科目调整</h2>
       </div>
     </div>
     <form method="post" action="{% url 'management_adjustments' %}" class="form-stack">
-      {% csrf_token %}
+      {% csrf_token %}<input type="hidden" name="cycle" value="{{ cycle.pk }}">
       <div class="form-row">
         <div class="form-field">
           <label for="id_full_project">项目</label>
@@ -128,7 +128,7 @@
 
       {% if full %}
       <div class="form-field muted">
-        已选项目 <strong>{{ full.project_name }}</strong>，共 <strong>{{ full.rows|length }}</strong> 行（其中可编辑叶子项 <strong>{{ full.edited|length }}</strong> 项已改动）。黄色输入框为可编辑叶子项，灰色为联动派生项（只读）。
+        已选项目 <strong>{{ full.project_name }}</strong>，共 <strong>{{ full.rows|length }}</strong> 行（其中可手填科目 <strong>{{ full.edited|length }}</strong> 项已改动）。黄色输入框为可手填科目，灰色为按公式计算的科目（不可直接修改）。
       </div>
       <div class="table-scroll table-scroll--wide">
         <table class="worksheet-table">
@@ -160,7 +160,7 @@
       </div>
 
       {% if full.edited %}
-      <div class="section-heading"><div><p class="eyebrow">前后对比</p><h3>全盘影响（年度）</h3></div></div>
+      <div class="section-heading"><div><p class="eyebrow">前后对比</p><h3>年度预算变化</h3></div></div>
       <div class="table-scroll">
         <table class="cascade-table">
           <caption class="sr-only">全表调整前后对比</caption>
@@ -183,7 +183,7 @@
       {% endif %}
 
       <div class="actions actions--end">
-        <button type="submit" name="action" value="full_preview" class="button button--ghost">测算全盘联动</button>
+        <button type="submit" name="action" value="full_preview" class="button button--ghost">计算调整结果</button>
         <button type="submit" name="action" value="full_issue" class="button button--primary">确认下发全表调整</button>
       </div>
       {% else %}

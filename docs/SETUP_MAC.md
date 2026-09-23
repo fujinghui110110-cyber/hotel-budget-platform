@@ -28,10 +28,10 @@ brew install --cask libreoffice
 
 ## 2. 建立虚拟环境
 
-在实际 checkout 目录执行。当前机器的示例路径是 `/Users/frank/Documents/ChatGPT/预算系统`：
+在实际 checkout 目录执行。当前机器的示例路径是 `/path/to/预算系统`：
 
 ```sh
-cd "/Users/frank/Documents/ChatGPT/预算系统"
+cd "/path/to/预算系统"
 sh scripts/setup_mac.sh
 ```
 
@@ -90,7 +90,7 @@ PYTHON_BIN=.venv/bin/python ./deploy/activate_template.sh 2027
 推荐使用根目录启动器：
 
 ```sh
-./启动预算统筹系统.command
+./一键启动.command
 ```
 
 它会调用 `scripts/local_server.py start --open`。服务启动后打开：
@@ -102,9 +102,9 @@ http://127.0.0.1:8768/
 命令行检查：
 
 ```sh
-./启动预算统筹系统.command status
+.venv/bin/python scripts/local_server.py status
 curl -fsS http://127.0.0.1:8768/healthz
-./停止预算统筹系统.command
+./scripts/maintenance/停止预算统筹系统.command
 ```
 
 `local_server.py` 启动一个 Gunicorn Web 进程和一个 `budget_worker`，上传在生产配置下入队后由 worker 处理。服务日志分别写入 `logs/server.log`、`logs/web.log` 和 `logs/worker.log`；状态文件在 `.runtime/server.json`。重复执行启动命令会复用已健康的本机服务，不会杀掉其他端口服务。
@@ -135,7 +135,7 @@ curl -fsS http://127.0.0.1:8768/healthz
 ## 8. 常见问题
 
 - `No such file or directory: .venv/bin/python`：先运行 `sh scripts/setup_mac.sh`。
-- 端口 `8768` 被占用：执行 `./启动预算统筹系统.command status`；若健康检查不是本系统，先查明占用者，不要让启动器终止其他服务。
+- 端口 `8768` 被占用：执行 `.venv/bin/python scripts/local_server.py status`；若健康检查不是本系统，先查明占用者，不要让启动器终止其他服务。
 - 页面能开但上传没有完成：查看 `logs/worker.log`，确认 `BUDGET_PROCESS_UPLOAD_INLINE=0` 时 worker 正在运行。
 - `soffice` 不存在：安装 LibreOffice，或在 `.env` / `.env.production` 中设置实际的 `SOFFICE_BIN`。
 - 正式配置启动失败并提示 `DJANGO_SECRET_KEY`：检查是否仍为 `CHANGE_ME` 或长度不足 50 个字符。

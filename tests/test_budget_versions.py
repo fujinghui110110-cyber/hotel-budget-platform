@@ -274,6 +274,10 @@ class RehearsalVersionBoundaryTests(TestCase):
         self.assertTrue(UploadForm(files={'file': file}, cycle=cycle).is_valid())
         standard = create_and_open_budget_version(budget_year=2030, template=template)
         self.assertIsNone(standard.source_budget_year)
-        self.assertFalse(UploadForm(data={'source_budget_year': '2029'}, files={'file': file}, cycle=standard).is_valid())
+        form = UploadForm(data={'source_budget_year': '2029'}, files={'file': file}, cycle=standard)
+        self.assertTrue(form.is_valid())
+        self.assertNotIn('source_budget_year', form.cleaned_data)
+        standard.refresh_from_db()
+        self.assertIsNone(standard.source_budget_year)
         with self.assertRaisesMessage(ValueError, '演练原表年度'):
             create_and_open_budget_version(budget_year=2030, source_budget_year=2031, template=template)

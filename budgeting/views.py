@@ -1,4 +1,5 @@
 from budgeting.services.trends import latest_report_uploads
+from budgeting.services.validation_reads import current_validation_issues
 import math
 import re
 from decimal import Decimal, ROUND_HALF_UP
@@ -134,12 +135,25 @@ def project_home(request):
 
 @role_required("PROJECT")
 def template_download(request):
+    from django.core.exceptions import ValidationError
+    from budgeting.services.template_library import get_distribution_template, download_distribution_template
     cycle = project_open_cycle(request.user.project)
-    template = cycle.template if cycle and cycle.template_id else TemplateVersion.objects.filter(is_active=True).order_by("-created_at").first()
-    if not cycle or not template:
-        raise Http404("当前没有可下载模板")
-    path = signed_template_copy(template, request.user.project, cycle)
-    return FileResponse(path.open("rb"), as_attachment=True, filename=Path(template.file_path).name)
+    if not cycle or not cycle.template_id:
+        messages.info(request, "目前没有开放填报的预算模板，请联系管理员。")
+        return redirect("project_dashboard")
+    try:
+        published = get_distribution_template(cycle)
+        if published:
+            path = download_distribution_template(published, request.user.project, cycle)
+            suffix = Path(published.original_name).suffix
+        else:
+            path = signed_template_copy(cycle.template, request.user.project, cycle)
+            suffix = Path(cycle.template.file_path).suffix
+        filename = f"{request.user.project.name}-{cycle.budget_year}年预算-R{cycle.revision_no}{suffix}"
+        return FileResponse(path.open("rb"), as_attachment=True, filename=filename)
+    except (FileNotFoundError, ValueError, ValidationError):
+        messages.error(request, "当前模板暂时无法下载，请联系管理员检查模板和历史数据。")
+        return redirect("project_dashboard")
 
 
 @role_required("PROJECT")
@@ -153,7 +167,7 @@ def upload_new(request):
         if form.is_valid():
             try:
                 upload = save_upload(request.user.project, cycle, form.cleaned_data["file"])
-                job = process_upload_now(upload) if settings.BUDGET_PROCESS_UPLOAD_INLINE else ProcessingJob.objects.get(upload=upload)
+                job = process_upload_now(upload) if settings.BUDGET_PROCESS_UPLOAD_INLINE else ProcessingJob.objects.filter(upload=upload).latest("created_at", "pk")
                 if job.status == ProcessingJob.Status.FAILED:
                     messages.warning(request, "文件已保存，但处理失败，请在详情页查看问题明细。")
                 elif job.status in (ProcessingJob.Status.QUEUED, ProcessingJob.Status.RUNNING):
@@ -180,7 +194,7 @@ def project_upload_detail(request, upload_id):
     is_admin = request.user.role == "ADMIN" or request.user.is_superuser
     if not is_admin and upload.project_id != request.user.project_id:
         return HttpResponse(status=403)
-    issues = ValidationIssue.objects.filter(run__upload=upload).order_by("severity", "code")
+    issues = current_validation_issues().filter(run__upload=upload).order_by("severity", "code")
     job = ProcessingJob.objects.filter(upload=upload).order_by("-created_at").first()
     from budgeting.services.data_read_audit import build_upload_audit_summary
     read_audit = build_upload_audit_summary(upload) if upload.status not in ("RECEIVED", "PROCESSING") else None
@@ -285,11 +299,12 @@ def management_cycle_reopen(request, cycle_id):
 
 @role_required("ADMIN")
 def management_projects(request):
-    cycle = active_cycle()
+    from budgeting.services.project_scope import cycle_projects
+    cycle = get_object_or_404(BudgetCycle, pk=request.GET["cycle"]) if request.GET.get("cycle", "").isdigit() else active_cycle()
     rows = []
     submitted_count = 0
     if cycle:
-        for project in Project.objects.filter(is_active=True).order_by("code"):
+        for project in cycle_projects(cycle):
             latest = UploadVersion.objects.filter(project=project, cycle=cycle).order_by("-created_at").first()
             pc = ProjectCycle.objects.filter(project=project, cycle=cycle).select_related("current_upload").first()
             rows.append({
@@ -357,6 +372,11 @@ def _render_report(request, report_code, project=None):
         cycle = get_object_or_404(BudgetCycle, pk=cycle_id)
     else:
         cycle = active_cycle()
+    if cycle and report_code in REPORTS and cycle.template_id and cycle.template.manifest_path and cycle.template.version != "V1":
+        from budgeting.services.report_presenter import render_report
+        return render_report(request, cycle, report_code, project)
+    if report_code in REPORTS and request.GET.get("source_mode"):
+        return HttpResponse("旧版数据未配置受控模板，不能声明工作、正式或冻结口径。", status=400)
     details = project_value_details(project, cycle, report_code, data_scope="latest") if project else (_company_value_details(cycle, report_code, data_scope="latest") if cycle else {})
     values = {key: detail["value_int"] for key, detail in details.items()}
     units = {key: detail["unit"] for key, detail in details.items()}
@@ -469,21 +489,22 @@ def _render_report(request, report_code, project=None):
         "REPORTS": REPORTS,
         "is_summary": report_code in REPORTS,
         "selected_project": project,
-        "report_scope": project.name if project else "公司正式汇总",
+        "report_scope": project.name if project else "旧版已抽取数据（未配置受控模板）",
         "project_scope_query": "?" + "&".join(query_parts),
     })
 
 
 @login_required
 def report_catalog(request):
+    from budgeting.services.project_scope import cycle_projects
+    cycle = get_object_or_404(BudgetCycle, pk=request.GET["cycle"]) if request.GET.get("cycle", "").isdigit() else active_cycle()
     if request.user.role == "ADMIN" or request.user.is_superuser:
         project = _requested_report_project(request)
-        projects = Project.objects.filter(is_active=True).order_by("code")
+        projects = cycle_projects(cycle)
     elif request.user.role == "PROJECT" and request.user.project_id:
         project, projects = request.user.project, []
     else:
         raise Http404
-    cycle = get_object_or_404(BudgetCycle, pk=request.GET["cycle"]) if request.GET.get("cycle", "").isdigit() else active_cycle()
     tables = sub_table_reports(cycle, data_scope="latest")
     if project:
         ids = [item.current_upload_id for item in latest_report_uploads(cycle, project_id=project.pk)]
@@ -500,6 +521,11 @@ def report_catalog(request):
 def management_report_drilldown(request, report_code):
     cycle = get_object_or_404(BudgetCycle, pk=request.GET["cycle"]) if request.GET.get("cycle", "").isdigit() else active_cycle()
     selected_project = _requested_report_project(request)
+    if cycle and report_code in REPORTS and cycle.template_id and cycle.template.manifest_path and cycle.template.version != "V1":
+        from budgeting.services.report_presenter import render_drilldown
+        return render_drilldown(request, cycle, report_code, _requested_report_project(request))
+    if report_code in REPORTS and request.GET.get("source_mode"):
+        return HttpResponse("旧版数据未配置受控模板，不能声明工作、正式或冻结口径。", status=400)
     row_code = request.GET.get("row_code") or request.GET.get("row") or ""
     period = request.GET.get("period") or ""
     current_ids = []
@@ -573,6 +599,7 @@ def management_report_drilldown(request, report_code):
     row_name = report_row_labels(cycle, report_code, [row_code],
                                  current_labels={row_code: row_name}).get(row_code, row_code)
     return render(request, "budgeting/management_report_drilldown.html", {
+        "cycle": cycle,
         "report_code": report_code,
         "report_name": _report_display_name(cycle, report_code),
         "row_code": row_code,
@@ -585,7 +612,7 @@ def management_report_drilldown(request, report_code):
         "total_amount": total,
         "unallocated": zero,
         "unallocated_amount": zero,
-        "project_scope_query": f"?project_id={selected_project.pk}" if selected_project else "",
+        "project_scope_query": f"?cycle={cycle.pk}" + (f"&project_id={selected_project.pk}" if selected_project else "") if cycle else "",
     })
 
 
@@ -835,7 +862,7 @@ def approve_upload_view(request, upload_id):
         except ValueError as exc:
             messages.error(request, str(exc))
         return redirect("management_projects")
-    issues = ValidationIssue.objects.filter(run__upload=upload).order_by("severity", "code")
+    issues = current_validation_issues().filter(run__upload=upload).order_by("severity", "code")
     return render(request, "budgeting/project_upload_detail.html", {"upload": upload, "issues": issues})
 
 
@@ -856,8 +883,11 @@ def reject_upload_view(request, upload_id):
 
 @role_required("ADMIN")
 def management_adjustments(request):
-    cycle = active_cycle()
-    projects = list(Project.objects.filter(is_active=True).order_by("code"))
+    from budgeting.services.project_scope import cycle_projects
+
+    cycle_id = request.POST.get("cycle") or request.GET.get("cycle")
+    cycle = get_object_or_404(BudgetCycle, pk=cycle_id) if cycle_id else active_cycle()
+    projects = list(cycle_projects(cycle))
     report_options = list(REPORTS.items())
     preview = None
     full = None
@@ -1134,13 +1164,16 @@ def healthz(request):
     except Exception:
         database_ok = False
     storage_ok = settings.BUDGET_STORAGE_ROOT.exists() and settings.BUDGET_STORAGE_ROOT.is_dir()
-    worker = ProcessingJob.objects.order_by("-updated_at").first()
+    from budgeting.services.worker_heartbeat import read_worker_status
+    worker = read_worker_status()
     return JsonResponse({
         "database": database_ok,
         "service": "hotel-budget",
         "storage": storage_ok,
         "libreoffice": Path(settings.SOFFICE_BIN).exists(),
-        "worker_last_seen": worker.updated_at.isoformat() if worker else None,
+        "worker_last_seen": worker.get("heartbeat_at"),
+        "worker_healthy": worker["healthy"],
+        "worker_state": worker["state"],
         "now": timezone.now().isoformat(),
     })
 

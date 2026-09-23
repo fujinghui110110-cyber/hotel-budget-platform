@@ -7,12 +7,14 @@ from django.conf import settings
 from django.db.models import Count, Max
 from openpyxl.utils.cell import get_column_letter
 
-from budgeting.models import NormalizedValue, REPORTS
+from budgeting.models import NormalizedValue, REPORTS, UploadVersion, ValidationRun
 from budgeting.services.legacy_rehearsal import _columns, _key, _number, _row_matches
 from budgeting.services.workbook_reference import WorkbookReferenceError, read_workbook
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 8
 REASONS = {
+    'VALIDATION_NOT_ADOPTED': '科目可取数，本版校验失败尚未采纳',
+    'VALIDATION_BLOCKED': '文件校验未通过，尚未读取报表',
     'REPORT_MISSING': '未找到汇总报表',
     'REPORT_EMPTY': '汇总报表没有数据',
     'MAPPING_MISSING': '未匹配到科目映射',
@@ -59,6 +61,18 @@ def build_upload_audit(upload, *, refresh=False):
     base_template = upload.cycle.template or template
     base_path = _path(base_template.manifest_path) if base_template else None
     stats = NormalizedValue.objects.filter(upload=upload).aggregate(count=Count('pk'), latest=Max('pk'))
+    if upload.status == UploadVersion.Status.REJECTED and not stats['count']:
+        run = ValidationRun.objects.filter(upload=upload).order_by('-created_at', '-pk').first()
+        blockers = list(run.issues.filter(severity='P0').values_list('code', 'message')) if run else []
+        structural = {'BAD_ZIP', 'EXTENSION', 'ZIP_SIZE', 'ZIP_ENTRY_COUNT', 'OOXML', 'ZIP_DUPLICATE_ENTRY', 'ZIP_TRAVERSAL', 'XML_SIZE', 'MACRO_OR_OLE', 'BLOCKED_PART', 'EXTERNAL_LINK', 'CONNECTION', 'ZIP_RATIO', 'UNZIPPED_SIZE', 'ZIP_READ_ERROR', 'XML_ENTITY', 'EXTERNAL_HYPERLINK', 'EXTERNAL_RELATIONSHIP', 'STORED_FILE_MISSING', 'STORED_FILE_HASH_MISMATCH'}
+        if any(code in structural for code, _ in blockers):
+            detail = '文件校验未通过，未进行报表读取；请先处理上传校验问题后重新上传。'
+            if blockers:
+                detail += ' 原因：' + '；'.join(dict.fromkeys(f'{code}：{message}' for code, message in blockers))
+            return dict(schema_version=SCHEMA_VERSION, upload_id=str(upload.pk),
+                        summary=dict(issue_count=1, report_count=0, expected_cells=0,
+                                     read_cells=0, missing_cells=0, reason_counts={'VALIDATION_BLOCKED': 1}),
+                        issues=[_issue('VALIDATION_BLOCKED', detail=detail)])
     fingerprint = hashlib.sha256(json.dumps([
         SCHEMA_VERSION, str(upload.pk), upload.sha256, upload.status, stats,
         _stamp(source), _stamp(manifest_path) if manifest_path else None,
@@ -78,7 +92,8 @@ def build_upload_audit(upload, *, refresh=False):
     result = dict(schema_version=SCHEMA_VERSION, upload_id=str(upload.pk), fingerprint=fingerprint,
                   summary={}, issues=[])
     issues = result['issues']
-    expected = read_count = report_count = 0
+    expected = read_count = report_count = withheld_count = 0
+    rejected_without_values = upload.status == UploadVersion.Status.REJECTED and not stats['count']
     try:
         manifest = json.loads(manifest_path.read_text()) if manifest_path else {}
         base = json.loads(base_path.read_text()) if base_path else {}
@@ -99,6 +114,7 @@ def build_upload_audit(upload, *, refresh=False):
         dimensions = set(NormalizedValue.objects.filter(upload=upload, history_import__isnull=False).values_list('report_code', 'data_year', 'data_kind'))
         legacy = bool(manifest.get('legacy_rehearsal'))
         for report_code, report in reports.items():
+            report_withheld = 0
             report_count += 1
             live_report = manifest.get('reports', {}).get(report_code, report)
             sheet_name = live_report.get('sheet', report.get('sheet', ''))
@@ -133,7 +149,7 @@ def build_upload_audit(upload, *, refresh=False):
                 for m in live_report.get('mapping', []):
                     if m.get('cell') in by_coord:
                         source_rows.setdefault(m['row_code'], by_coord[m['cell']]['row'])
-            empty = bool(sheet) and not any(_number(c) is not None or c.get('is_formula') or c.get('error_status') for c in cells if c.get('row', 0) > (live_report.get('region', {}).get('header_row') or 0))
+            empty = bool(sheet) and not any(key[0] == report_code for key in normalized) and not any(_number(c) is not None or c.get('is_formula') or c.get('error_status') for c in cells if c.get('row', 0) > (live_report.get('region', {}).get('header_row') or 0))
             if empty:
                 expected += len(mapping)
                 issues.append(_issue('REPORT_EMPTY', report_code, sheet=sheet_name, detail=f'汇总报表“{sheet_name}”没有可用数据，{len(mapping)}个期望数据项无法读取。'))
@@ -168,17 +184,27 @@ def build_upload_audit(upload, *, refresh=False):
                     elif cell.get('is_formula') and _number(cell) is None:
                         reason = 'FORMULA_CACHE_MISSING'
                     elif cell.get('cached_value') is None or cell.get('cached_value') == '':
-                        reason = 'CELL_EMPTY'
+                        reason = 'NORMALIZED_MISSING'
                     elif _number(cell) is None:
                         reason = 'NON_NUMERIC'
                     else:
                         reason = 'NORMALIZED_MISSING'
+                if reason == 'NORMALIZED_MISSING' and rejected_without_values:
+                    report_withheld += 1
+                    withheld_count += 1
+                    continue
                 detail = REASONS[reason]
+                if reason == 'NORMALIZED_MISSING' and cell.get('cached_value') in (None, ''):
+                    detail = '已匹配科目的空白输入按0处理，但系统尚未读取该项。'
                 if reason == 'CACHE_ERROR':
                     detail += f"：{cell.get('cached_value') or cell.get('error_status')}"
                 issues.append(_issue(reason, report_code, item, period, sheet_name, coordinate, detail))
+            if report_withheld:
+                issues.append(_issue('VALIDATION_NOT_ADOPTED', report_code, sheet=sheet_name,
+                                     detail=f'原表中{report_withheld}个数据项可取数（空白输入按0）；本版未通过校验，整份数据尚未采纳。请先处理上传校验问题，这些科目不重复计为缺数。'))
     result['summary'] = dict(issue_count=len(issues), report_count=report_count, expected_cells=expected,
-                             read_cells=read_count, missing_cells=expected-read_count,
+        read_cells=read_count, missing_cells=expected-read_count-withheld_count,
+        withheld_cells=withheld_count,
                              reason_counts=dict(Counter(i['reason_code'] for i in issues)))
     try:
         if upload.original_path and source.is_file():

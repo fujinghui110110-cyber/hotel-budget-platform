@@ -23,7 +23,7 @@ def _state(state=None):
     return {key: state.get(key, default) for key, default in (
         ('current_version', ''), ('available_version', ''), ('release_notes', ''),
         ('update_available', False), ('configured', False), ('status', 'idle'),
-        ('busy', False), ('error', ''), ('message', ''),
+        ('busy', False), ('error', ''), ('message', ''), ('backup_status', ''), ('rollback_versions', []),
     )}
 
 
@@ -55,7 +55,7 @@ def update_action(request):
     if not _allowed(request):
         return HttpResponseForbidden('请在服务器电脑上使用本机地址，以管理员身份操作。')
     action = request.POST.get('action')
-    if action not in ('configure', 'check', 'install'):
+    if action not in ('configure', 'check', 'install', 'rollback'):
         return JsonResponse({'error': '不支持的操作。'}, status=400)
     try:
         if action == 'configure':
@@ -66,6 +66,8 @@ def update_action(request):
             result = None
         elif action == 'check':
             result = system_update.check()
+        elif action == 'rollback':
+            result = system_update.start_rollback(request.POST.get('version', ''))
         else:
             result = system_update.start_update()
     except system_update.UpdateError as exc:

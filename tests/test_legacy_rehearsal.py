@@ -134,7 +134,10 @@ class LegacyRehearsalTests(TestCase):
             template=self.template,
         )
         self.source_path = self.root / "original.xlsx"
-        self.source_path.write_bytes(b"mock source")
+        from openpyxl import Workbook
+        workbook = Workbook()
+        workbook.save(self.source_path)
+        workbook.close()
         self.upload = UploadVersion.objects.create(
             project=self.project,
             cycle=self.cycle,
@@ -172,6 +175,44 @@ class LegacyRehearsalTests(TestCase):
         self.assertEqual(values.filter(row_code="R0002", period="01").get().value_int, 3000)
         self.assertTrue(values.filter(row_code="S0031", period="01").exists())
 
+    def test_blank_budget_cells_become_zero_with_source_coordinates(self):
+        source_sheet = _sheet(
+            "酒店损益总表（含名酒）",
+            [(30, "收入A", 10), (32, "收入B", 30)],
+        )
+        source_sheet["cells"] = [
+            cell
+            for cell in source_sheet["cells"]
+            if not (cell["row"] == 30 and cell["column"] == 2)
+        ]
+        for cell in source_sheet["cells"]:
+            if cell["row"] == 30 and cell["column"] in {3, 14}:
+                cell["cached_value"] = None
+                cell["display_value"] = None
+        result, _run = self._run({"sheets": [source_sheet]})
+        self.assertTrue(result)
+        values = NormalizedValue.objects.filter(
+            upload=self.upload, report_code="PL_TOTAL_WINE", row_code="R0001"
+        )
+        for period, coordinate in (("01", "B30"), ("02", "C30"), ("YEAR", "N30")):
+            value = values.filter(period=period).get()
+            self.assertEqual(value.value_int, 0)
+            self.assertEqual(value.source_cell, coordinate)
+            self.assertEqual(value.source_formula, "")
+
+    def test_unmapped_blank_budget_cell_is_not_created_as_zero(self):
+        source = _sheet(
+            "酒店损益总表（含名酒）",
+            [(30, "收入A", 10), (31, "未映射科目", None), (32, "收入B", 30)],
+        )
+        result, _run = self._run({"sheets": [source]})
+        self.assertTrue(result)
+        values = NormalizedValue.objects.filter(
+            upload=self.upload, report_code="PL_TOTAL_WINE", row_code="S0031"
+        )
+        self.assertFalse(values.filter(period="01").exists())
+        self.assertEqual(values.filter(period="YEAR").get().value_int, 99_900)
+
     def test_source_year_offset_preserves_actual_and_forecast_kind(self):
         source = _sheet(
             "酒店损益总表（含名酒）",
@@ -191,6 +232,27 @@ class LegacyRehearsalTests(TestCase):
         self.assertTrue(values.filter(period="A2026", data_year=2026, data_kind="ACTUAL").exists())
         self.assertTrue(values.filter(period="F2027", data_year=2027, data_kind="FORECAST").exists())
 
+    def test_blank_actual_and_forecast_cells_are_not_zeroed(self):
+        source = _sheet(
+            "酒店损益总表（含名酒）",
+            [(30, "收入A", 10), (32, "收入B", 30)],
+        )
+        source["cells"].extend(
+            [
+                _cell(20, 16, "2025年实际"),
+                _cell(20, 17, "2026年预测"),
+                _cell(30, 16, None),
+                _cell(30, 17, None),
+            ]
+        )
+        result, _run = self._run({"sheets": [source]})
+        self.assertTrue(result)
+        values = NormalizedValue.objects.filter(
+            upload=self.upload, report_code="PL_TOTAL_WINE", row_code="R0001"
+        )
+        self.assertFalse(values.filter(period="A2026").exists())
+        self.assertFalse(values.filter(period="F2027").exists())
+
     def test_missing_cache_is_skipped_instead_of_becoming_zero(self):
         source = _sheet(
             "酒店损益总表（含名酒）",
@@ -207,6 +269,27 @@ class LegacyRehearsalTests(TestCase):
         )
         self.assertFalse(
             NormalizedValue.objects.filter(upload=self.upload, row_code="R0001", period="01", value_int=0).exists()
+        )
+        self.assertTrue(run.issues.filter(code="LEGACY_SOURCE_CACHE_GAPS").exists())
+
+    def test_error_budget_cell_is_not_zeroed(self):
+        source = _sheet(
+            "酒店损益总表（含名酒）",
+            [(30, "收入A", 10), (32, "收入B", 30)],
+        )
+        for cell in source["cells"]:
+            if cell["row"] == 30 and cell["column"] == 2:
+                cell["cached_value"] = "#DIV/0!"
+                cell["display_value"] = "#DIV/0!"
+                cell["error_status"] = "#DIV/0!"
+                cell["is_error"] = True
+        result, run = self._run({"sheets": [source]})
+        self.assertTrue(result)
+        self.assertFalse(
+            NormalizedValue.objects.filter(
+                upload=self.upload, report_code="PL_TOTAL_WINE", row_code="R0001",
+                period="01", value_int=0,
+            ).exists()
         )
         self.assertTrue(run.issues.filter(code="LEGACY_SOURCE_CACHE_GAPS").exists())
 

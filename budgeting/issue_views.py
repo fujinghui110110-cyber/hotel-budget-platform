@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from budgeting.excel.money import cents_to_yuan, yuan_to_cents
 from budgeting.models import BudgetCycle, ValidationIssue
 from budgeting.services.workflow import audit
+from budgeting.services.validation_reads import current_validation_issues
 
 
 class IssueExplanationForm(forms.Form):
@@ -52,7 +53,7 @@ def _is_admin(user):
 
 
 def _issue_queryset(upload_id=None):
-    queryset = ValidationIssue.objects.select_related(
+    queryset = current_validation_issues().select_related(
         "run__upload__project",
         "run__upload__cycle",
     ).filter(severity=ValidationIssue.Severity.P1)

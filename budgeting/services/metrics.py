@@ -76,7 +76,15 @@ METRICS = {
         "unit": "MONEY",
         "aggregation": "SUM",
         "rows": _rows("R9003", "R9003", "R9003", "R9003"),
-        "source": {"available": True, "section": "经营补充指标", "cell_range": "D3:O3", "note": "须由项目独立填报；作为分析子项，不重复计入四表收入"},
+        "source": {"available": True, "section": "名酒明细", "cell_range": "按科目及月度表头识别", "note": "优先读取独立名酒表或明确明细行，补充指标作为后备；已包含在其他收入中，不重复加总或用其他收入全额代替"},
+    },
+    "cost_wine": {
+        "label": "名酒成本",
+        "group": "cost",
+        "unit": "MONEY",
+        "aggregation": "SUM",
+        "rows": _rows("R9006", "R9006", "R9006", "R9006"),
+        "source": {"available": True, "section": "名酒明细", "cell_range": "按科目及月度表头识别", "note": "只读取独立名酒表或明确名酒成本行；已包含在其他销售成本中，缺失时不按收入比例推算"},
     },
     "revenue_seasonal": {
         "label": "季节性产品收入（月饼亭）",

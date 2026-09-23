@@ -2,6 +2,7 @@
 {% block title %}项目工作台 · 酒店预算与损益管理平台{% endblock %}
 {% block breadcrumb %}<span>项目工作台</span>{% endblock %}
 {% block content %}
+{% include 'budgeting/includes/annual_targets_link.html' with target_project=user.project %}
   {% url 'project_template_download' as template_download_url %}
   {% url 'project_upload_new' as upload_new_url %}
   {% url 'project_history' as history_url %}
@@ -21,9 +22,9 @@
   <section class="summary-grid" aria-label="项目概况">
     <article class="summary-card">
       <span class="summary-card__label">当前项目</span>
-      {% if project %}<strong>{{ project.name|default:'未绑定项目' }}</strong><small>{{ project.code|default:'—' }}</small>
-      {% elif user.project %}<strong>{{ user.project.name|default:'未绑定项目' }}</strong><small>{{ user.project.code|default:'—' }}</small>
-      {% else %}<strong>未绑定项目</strong><small>—</small>{% endif %}
+      {% if project %}<strong>{{ project.name|default:'尚未分配项目' }}</strong><small>{{ project.code|default:'—' }}</small>
+      {% elif user.project %}<strong>{{ user.project.name|default:'尚未分配项目' }}</strong><small>{{ user.project.code|default:'—' }}</small>
+      {% else %}<strong>尚未分配项目</strong><small>—</small>{% endif %}
     </article>
     <article class="summary-card">
       <span class="summary-card__label">当前周期</span>

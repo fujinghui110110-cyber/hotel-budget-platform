@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}年度目标 · {{ project.name }}{% endblock %}
+{% block breadcrumb %}<span>年度预算目标</span>{% endblock %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">{{ plan.budget_year }} 年度预算</p><h1>{{ project.name }} · 正式目标</h1><p class="lede">目标跨填报轮次持续生效。金额单位为元；只有明确选定的指标成为正式要求，公式联动保持原有计算。</p></div></section>
+{% if catalog_error %}<p class="message message--error">{{ catalog_error }}</p>{% endif %}
+<section class="panel"><h2>现行目标 {% if current %}第 {{ current.revision }} 次修订{% endif %}</h2><p>{% if upload %}比较底稿：R{{ upload.cycle.revision_no }} · {{ upload.original_name }} · {{ upload.created_at|date:'Y-m-d H:i' }}{% else %}尚无可比较的已校验底稿。{% endif %}</p>
+<div class="table-wrap"><table><thead><tr><th>汇总表 / 指标</th><th>要求</th><th>目标（元）</th><th>实际（元）</th><th>缺口（元）</th><th>状态</th><th>口径依据</th></tr></thead><tbody>{% for row in rows %}<tr><th>{{ row.label }}<br><small>{{ row.report }}</small></th><td>{{ row.comparison }}</td><td>{{ row.target }}</td><td>{{ row.actual }}</td><td>{{ row.gap }}</td><td>{{ row.status }}</td><td>{{ row.evidence }}</td></tr>{% empty %}<tr><td colspan="7">当前没有有效的正式目标。</td></tr>{% endfor %}</tbody></table></div>
+{% if current %}<p>下发来源：{{ current.origin_cycle.name }} · {{ current.created_at|date:'Y-m-d H:i' }} · {{ current.created_by.username }}<br>修订说明：{{ current.reason }}</p>{% endif %}</section>
+{% if is_admin %}<section class="panel"><h2>选定或修订一个正式指标</h2><p>先选汇总行，再确认类型、方向和符号。收入/利润选择“不低于”，费用选择“不高于”。利润目标独立记录，不覆盖公式结果。相同汇总行的新要求替代旧要求，其余目标继续保留。</p>
+<form method="post">{% csrf_token %}<input type="hidden" name="revision" value="{{ plan.revision_token }}"><input type="hidden" name="action" value="save">
+<div class="form-grid"><label>汇总表指标<select name="metric" required><option value="">请选择金额指标</option>{% for option in options %}<option value="{{ option.key }}">{{ option.label }}</option>{% endfor %}</select></label>
+<label>指标类型<select name="kind" required><option value="">请选择</option><option value="REVENUE">收入</option><option value="EXPENSE">费用</option><option value="PROFIT">利润</option><option value="OTHER">其他已确认金额指标</option></select></label>
+<label>比较方向<select name="comparator" required><option value="GE">不低于</option><option value="LE">不高于</option><option value="EQ">等于（其他已批准规则）</option></select></label>
+<label>目标金额（元）<input name="amount" inputmode="decimal" required></label>
+<label>源表符号<select name="sign" required><option value="">请确认</option><option value="1">按源表原有正负号</option><option value="-1">费用源表为负数，按已确认口径反转符号</option></select></label>
+<label>科目及符号确认依据<input name="evidence" required placeholder="填写制度、模板口径或核对依据"></label><label>下发 / 修订说明<textarea name="reason" required></textarea></label></div>
+<label><input type="checkbox" name="confirmed" value="yes" required> 我确认本次选定指标、元单位、比较方向和符号口径。</label><p><button class="button button--primary" {% if not options %}disabled{% endif %}>确认并下发选定目标</button></p></form></section>
+{% if rows %}<section class="panel"><h2>撤销现行目标</h2><form method="post">{% csrf_token %}<input type="hidden" name="revision" value="{{ plan.revision_token }}"><input type="hidden" name="action" value="revoke"><label>撤销全部现行目标的理由<input name="reason" required></label><button class="button button--secondary" data-confirm="确认撤销本项目本年度全部现行目标？历史记录将保留。">确认撤销全部目标</button></form></section>{% endif %}{% endif %}
+{% endblock %}

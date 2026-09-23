@@ -1,6 +1,7 @@
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import tempfile
 from unittest import mock
@@ -16,6 +17,9 @@ class SystemUpdateTests(SimpleTestCase):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.root = Path(self.folder.name)
+        self.runtime_patch = mock.patch.dict(os.environ, {'BUDGET_RUNTIME_ROOT': str(self.root / 'independent-runtime')})
+        self.runtime_patch.start()
+        self.addCleanup(self.runtime_patch.stop)
         self.patch = mock.patch.object(update, 'ROOT', self.root)
         self.patch.start()
         self.addCleanup(self.patch.stop)
@@ -85,7 +89,7 @@ class SystemUpdateTests(SimpleTestCase):
         (self.root / '.env').write_text('secret')
         self.assertEqual(set(update.managed_files()), {'system_version.json', 'scripts/a.py'})
 
-    def test_rollback_restores_database_code_and_interpreter(self):
+    def test_legacy_restore_is_rejected_without_overwriting_new_business_data(self):
         import sqlite3
         backup = self.root / 'backup'
         (backup / 'code').mkdir(parents=True)
@@ -98,16 +102,17 @@ class SystemUpdateTests(SimpleTestCase):
         with sqlite3.connect(db) as source, sqlite3.connect(backup / 'database.sqlite3') as target:
             source.backup(target)
         with sqlite3.connect(db) as conn:
-            conn.execute('delete from sentinel')
+            conn.execute("insert into sentinel values ('new-upload')")
         journal = {'backup': str(backup), 'old_files': ['manage.py'], 'new_files': ['manage.py'],
                    'database': str(db), 'database_existed': True, 'old_python_pointer': {},
                    'old_python': 'python', 'port': 8878}
         with mock.patch.object(update, 'run') as command, mock.patch.object(update, 'start_server'):
-            update.restore(journal)
+            with self.assertRaises(update.UpdateError):
+                update.restore(journal)
             command.assert_not_called()  # Recovery must not execute the failed candidate's shutdown code.
-        self.assertEqual((self.root / 'manage.py').read_text(), 'old')
+        self.assertEqual((self.root / 'manage.py').read_text(), 'new')
         with sqlite3.connect(db) as conn:
-            self.assertEqual(conn.execute('select value from sentinel').fetchone()[0], 'preserved')
+            self.assertEqual(conn.execute('select value from sentinel order by rowid').fetchall(), [('preserved',), ('new-upload',)])
 
     def test_stale_launch_without_process_does_not_spin_forever(self):
         update.write_json(update.runtime('update-state.json'), {'busy': True, 'status': 'starting', 'process': None, 'updated_at': 1})

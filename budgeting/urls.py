@@ -1,6 +1,7 @@
 from budgeting import history_views, batch_views
 from budgeting import update_views
 from django.urls import include, path
+from . import processing_views
 
 from budgeting import views, data_audit_views
 from budgeting import cockpit_views
@@ -11,6 +12,8 @@ from budgeting import access_views
 
 
 urlpatterns = [
+    path('management/metrics/', include('budgeting.management_metric_urls')),
+    path("", include("budgeting.target_urls")),
     path("management/batch-upload/", batch_views.batch_upload, name="management_batch_upload"),
     path("management/history/", history_views.history_management, name="history_management"),
     path("management/history/<uuid:batch_id>/", history_views.history_review, name="history_review"),
@@ -55,6 +58,7 @@ urlpatterns = [
     path("project/template/", views.template_download, name="project_template_download"),
     path("project/uploads/new", views.upload_new, name="project_upload_new"),
     path("project/uploads/<uuid:upload_id>/", views.project_upload_detail, name="project_upload_detail"),
+    path("project/uploads/<uuid:upload_id>/retry/", processing_views.retry_upload, name="upload_retry"),
     path("project/uploads/<uuid:upload_id>/submit", views.project_submit_upload, name="project_submit_upload"),
     path("project/uploads/<uuid:upload_id>/submit", views.project_submit_upload, name="project_upload_submit"),
     path("project/adjustments/", views.project_adjustments, name="project_adjustments"),

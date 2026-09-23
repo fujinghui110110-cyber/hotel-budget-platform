@@ -27,8 +27,10 @@ ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = 'fujinghui110110-cyber/hotel-budget-platform'
 API = 'https://api.github.com/repos/' + REPOSITORY
 ASSET_NAME = 'budget-system-update.zip'
-CODE_DIRS = {'budgeting', 'config', 'scripts', 'templates', 'static', 'docs'}
-CODE_FILES = {'manage.py', 'requirements.txt', 'README.md', 'system_version.json', 'requirements-update.lock'}
+try:
+    from scripts.build_system_release import CODE_ROOTS as CODE_DIRS, ROOT_FILES as CODE_FILES, allowed_path as release_allowed_path
+except ImportError:
+    from build_system_release import CODE_ROOTS as CODE_DIRS, ROOT_FILES as CODE_FILES, allowed_path as release_allowed_path
 MAX_ARCHIVE = 100 * 1024 * 1024
 
 
@@ -37,7 +39,7 @@ class UpdateError(ValueError, RuntimeError):
 
 
 def runtime(name):
-    return ROOT / '.runtime' / name
+    return Path(os.getenv('BUDGET_RUNTIME_ROOT', ROOT / '.runtime')) / name
 
 
 def read_json(path, default=None):
@@ -66,7 +68,7 @@ def current_version():
     return read_json(ROOT / 'system_version.json').get('version', '2026.09.11.0')
 
 
-def status():
+def _base_status():
     state = read_json(runtime('update-state.json'))
     busy = bool(state.get('busy'))
     stale_launch = busy and not state.get('process') and time.time() - state.get('updated_at', runtime('update-state.json').stat().st_mtime) > 30
@@ -81,6 +83,24 @@ def status():
             'update_available': bool(release and version_key(release['version']) > version_key(current_version())),
             'busy': state.get('busy', False), 'error': state.get('error', ''),
             'status': state.get('status', 'idle')}
+
+
+def status():
+    result = _base_status()
+    install = Path(os.getenv('BUDGET_INSTALL_ROOT', ROOT))
+    versions = []
+    for path in (install / 'releases').glob('*/manifest.json'):
+        try:
+            from scripts.release_manager import validate_manifest
+            manifest = validate_manifest(read_json(path))
+            if manifest['version'] != result['current_version']:
+                versions.append(manifest['version'])
+        except (ValueError, OSError, TypeError):
+            continue
+    result['rollback_versions'] = sorted(versions, reverse=True)
+    journal = read_json(settings_paths().parent / 'update-journal.json')
+    result['backup_status'] = '已保留完整备份：' + journal['backup'] if journal.get('backup') else '尚无新版升级备份'
+    return result
 
 
 def configure(token):
@@ -150,12 +170,7 @@ def check():
 
 
 def allowed_path(name):
-    path = PurePosixPath(name)
-    return (bool(name) and '\\' not in name and ':' not in name and not path.is_absolute()
-            and all(part not in ('', '.', '..') and not part.startswith('.') and part != '__pycache__' for part in name.split('/'))
-            and path.suffix.lower() not in {'.sqlite', '.sqlite3', '.db', '.xlsx', '.xlsm', '.exe', '.msi', '.pyc', '.pyo'}
-            and not any(part.upper().split('.')[0] in {'CON', 'PRN', 'AUX', 'NUL', *('COM'+str(n) for n in range(1,10)), *('LPT'+str(n) for n in range(1,10))} or part.endswith((' ', '.')) for part in path.parts)
-            and (path.parts[0] in CODE_DIRS or name in CODE_FILES or (len(path.parts) == 1 and path.suffix in {'.bat', '.command'})))
+    return release_allowed_path(name)
 
 
 def validate_archive(archive, target, expected_version):
@@ -168,7 +183,7 @@ def validate_archive(archive, target, expected_version):
             raise UpdateError('更新包缺少文件校验清单。')
         manifest = json.loads(package.read('manifest.json'))
         files = manifest.get('files', {})
-        if manifest.get('schema') != 1 or manifest.get('version') != expected_version or not isinstance(files, dict):
+        if manifest.get('schema') not in (1, 2) or manifest.get('version') != expected_version or not isinstance(files, dict):
             raise UpdateError('更新包版本或格式不匹配。')
         if set(names) != {'manifest.json', *files} or not {'manage.py', 'requirements.txt', 'system_version.json', 'scripts/local_server.py', 'scripts/system_update.py'} <= files.keys():
             raise UpdateError('更新包文件清单不完整。')
@@ -300,118 +315,47 @@ def start_server(python, port):
 
 
 def restore(journal):
-    backup = Path(journal['backup'])
-    running = read_json(runtime('server.json'))
-    if process_matches(running.get('pid'), ROOT / 'scripts/local_server.py', 'serve'):
-        stop_process_tree(running['pid'])
-    stop_identities(running.get('children_identity', []))
-    runtime('server.json').unlink(missing_ok=True)
-    replace_code(backup / 'code', journal['old_files'], set(journal['new_files']) - set(journal['old_files']))
-    database = Path(journal['database'])
-    if journal['database_existed']:
-        for suffix in ('-wal', '-shm'):
-            Path(str(database) + suffix).unlink(missing_ok=True)
-        shutil.copy2(backup / 'database.sqlite3', database)
-    else:
-        database.unlink(missing_ok=True)
-    pointer = runtime('active-python.json')
-    if journal['old_python_pointer']:
-        write_json(pointer, journal['old_python_pointer'])
-    else:
-        pointer.unlink(missing_ok=True)
-    write_json(runtime('installed-files.json'), journal.get('old_installed_files', []))
-    start_server(journal['old_python'], journal['port'])
-    runtime('update-journal.json').unlink(missing_ok=True)
-    runtime('update-maintenance').unlink(missing_ok=True)
+    raise UpdateError("禁止自动恢复旧数据库；请先核对新增业务数据并执行独立的数据恢复流程。")
 
 
 def apply_update():
-    with FileLock(runtime('update-worker.lock')):
-        # Wait until start_update has recorded the detached worker's identity.
-        time.sleep(.2)
-        release = read_json(runtime('update-release.json'))
-        journal = None
-        stopped = False
-        old_python = sys.executable
-        server = read_json(runtime('server.json'))
-        port = server.get('port', 8768)
-        public_was_running = read_json(runtime('public-access.json')).get('running', False)
-        operation = runtime('updates') / (time.strftime('%Y%m%d-%H%M%S') + '-' + secrets.token_hex(4))
-        operation.mkdir(parents=True, mode=0o700)
+    from scripts import release_adapter
+    pending = read_json(runtime('rollback-request.json'))
+    if pending:
+        runtime('rollback-request.json').unlink(missing_ok=True)
         try:
-            state('downloading', busy=True, message='正在下载并校验新版本。')
-            archive = operation / 'update.zip'
-            digest = hashlib.sha256()
-            count = 0
-            with github_open(API + '/releases/assets/' + str(release['asset_id']), 'application/octet-stream') as response, archive.open('wb') as output:
-                while chunk := response.read(1024 * 1024):
-                    count += len(chunk)
-                    if count > MAX_ARCHIVE:
-                        raise UpdateError('更新文件过大，已停止下载。')
-                    digest.update(chunk)
-                    output.write(chunk)
-            if digest.hexdigest() != release['sha256'] or count != release['size']:
-                raise UpdateError('下载文件校验失败，请重新检查更新。')
-            candidate = operation / 'candidate'
-            manifest = validate_archive(archive, candidate, release['version'])
-            new_python = old_python
-            if (candidate / 'requirements.txt').read_bytes() != (ROOT / 'requirements.txt').read_bytes():
-                state('preparing', message='正在独立环境中安装新版本依赖，原环境保持可用。')
-                lock = candidate / 'requirements-update.lock'
-                if not lock.exists():
-                    raise UpdateError('新版本改变了依赖，但缺少带哈希的依赖锁定文件，请联系发布者。')
-                environment = operation / 'environment'
-                run([old_python, '-m', 'venv', environment])
-                new_python = str(python_in(environment))
-                run([new_python, '-m', 'pip', 'install', '--only-binary=:all:', '--require-hashes', '-r', lock, '-r', candidate / 'requirements.txt'], timeout=900)
-                run([new_python, '-m', 'pip', 'check'])
-            run([new_python, '-m', 'compileall', '-q', candidate / 'budgeting', candidate / 'config', candidate / 'scripts'])
-            database = settings_paths()
-            backup = operation / 'backup'
-            backup.mkdir(mode=0o700)
-            old_files = backup_code(backup)
-            state('backing_up', message='正在暂停服务并备份数据库，请稍候。')
-            runtime('update-maintenance').write_text('updating', encoding='utf-8')
-            stopped = True
-            run([old_python, ROOT / 'scripts/stop_all.py'], timeout=330)
-            existed = database.exists()
-            if existed:
-                with closing(sqlite3.connect(str(database))) as source, closing(sqlite3.connect(str(backup / 'database.sqlite3'))) as target:
-                    source.backup(target)
-                (backup / 'database.sqlite3').chmod(0o600)
-            journal = {'backup': str(backup), 'old_files': old_files, 'new_files': list(manifest['files']),
-                       'database': str(database), 'database_existed': existed, 'port': port,
-                       'old_python': old_python, 'old_python_pointer': read_json(runtime('active-python.json')),
-                       'old_installed_files': read_json(runtime('installed-files.json'), [])}
-            write_json(runtime('update-journal.json'), journal)
-            state('installing', message='正在安装新版本并升级数据库。')
-            replace_code(candidate, manifest['files'], set(journal['old_installed_files']) - set(manifest['files']))
-            write_json(runtime('active-python.json'), {'path': new_python})
-            run([new_python, ROOT / 'manage.py', 'check'])
-            run([new_python, ROOT / 'manage.py', 'migrate', '--noinput'])
-            start_server(new_python, port)
-            write_json(runtime('installed-files.json'), list(manifest['files']))
-            runtime('update-journal.json').unlink(missing_ok=True)
-            runtime('update-maintenance').unlink(missing_ok=True)
-            state('completed', busy=False, error='', message='更新成功。' + ('公网访问已暂停，请在公网访问页面重新生成链接。' if public_was_running else ''), backup=str(backup))
-        except Exception as exc:
-            # Exception text is constrained to our messages; URLs and credentials never reach status/logs.
-            message = str(exc) if isinstance(exc, UpdateError) else '更新失败，请检查网络、磁盘空间和运行环境。'
-            if journal:
-                try:
-                    state('rolling_back', message='更新未成功，正在恢复旧版本。')
-                    restore(journal)
-                    state('rolled_back', busy=False, error=message, message='已恢复旧版本，原有预算数据保持完整。')
-                except Exception:
-                    state('recovery_required', busy=False, error='自动恢复未完成，请按系统更新说明执行恢复命令。', message='备份保存在本机 .runtime/updates 目录。')
-            else:
-                if stopped:
-                    try:
-                        start_server(old_python, port)
-                    except Exception:
-                        pass
-                runtime('update-maintenance').unlink(missing_ok=True)
-                state('failed', busy=False, error=message, message='未替换程序。原有数据保留。')
+            release_adapter.rollback(sys.modules[__name__], pending['version'])
+        except Exception:
+            state('recovery_required', busy=False, error='代码回退未完成，请检查版本兼容性与维护状态。')
+    else:
+        release_adapter.apply_update(sys.modules[__name__])
+
+
+def start_rollback(version):
+    with FileLock(runtime('update.lock')):
+        return _start_rollback_locked(version)
+
+
+def _start_rollback_locked(version):
+    version_key(version)
+    from scripts import release_adapter
+    from scripts.release_manager import ReleaseManager, compatible, CAPABILITIES
+    env = release_adapter.environment(sys.modules[__name__])
+    manager = ReleaseManager(env['BUDGET_INSTALL_ROOT'], Path(env['DATABASE_PATH']).parent)
+    target = manager.install / 'releases' / version
+    manager.pointer_for(target)
+    compatible(read_json(target / 'manifest.json'), release_adapter.database_schema(env['DATABASE_PATH']), CAPABILITIES)
+    if status()['busy']:
+        raise UpdateError('正在更新，请稍后操作。')
+    write_json(runtime('rollback-request.json'), {'version': version})
+    state('starting', busy=True, error='', message='正在切换兼容代码，保留当前数据库。', process=None)
+    with (ROOT / 'logs/system-update.log').open('a', encoding='utf-8') as log:
+        child = subprocess.Popen([sys.executable, str(ROOT / 'scripts/system_update.py'), 'launch'], cwd=ROOT,
+            stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, **detached_popen_kwargs())
+    child.wait(timeout=15)
+    if child.returncode:
+        raise UpdateError('无法启动回退进程。')
+    return status()
 
 
 def main():

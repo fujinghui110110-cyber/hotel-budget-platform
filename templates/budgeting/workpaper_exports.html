@@ -12,7 +12,7 @@
 <section class="planning-heading">
   <div>
     <h1>预算底稿导出</h1>
-    <p>按预算周期下载项目原始底稿、重算 XLSX，或生成带清单的批量 ZIP。{% if cycle.source_budget_year %} 当前为历史原表演练，批量 ZIP 包含全部原件，不执行宏或生成重算文件。{% endif %}</p>
+    <p>按预算版本下载项目原始底稿、计算后的报表，或一键打包全部项目文件。{% if cycle.source_budget_year %} 当前版本使用历史原表，批量下载包含上传原件，不另行生成计算后的报表。{% endif %}</p>
   </div>
   {% if cycle %}
   <div class="page-heading__actions">
@@ -114,7 +114,7 @@
             {% if row.approved_entry %}
               {% if row.approved_entry.original.available %}<a class="text-link" href="{{ row.approved_entry.original.url }}">原始底稿</a>{% else %}<span class="muted" title="{{ row.approved_entry.original.message }}">原始底稿（不可用）</span>{% endif %}
               <span aria-hidden="true"> · </span>
-              {% if row.approved_entry.recalculated.available %}<a class="text-link" href="{{ row.approved_entry.recalculated.url }}">重算 XLSX</a>{% else %}<span class="muted" title="{{ row.approved_entry.recalculated.message }}">重算 XLSX（不可用）</span>{% endif %}
+              {% if row.approved_entry.recalculated.available %}<a class="text-link" href="{{ row.approved_entry.recalculated.url }}">计算后报表</a>{% else %}<span class="muted" title="{{ row.approved_entry.recalculated.message }}">计算后报表（不可用）</span>{% endif %}
             {% else %}
             <span class="muted">—</span>
             {% endif %}
@@ -131,7 +131,7 @@
             {% if row.latest_entry %}
               {% if row.latest_entry.original.available %}<a class="text-link" href="{{ row.latest_entry.original.url }}">原始底稿</a>{% else %}<span class="muted" title="{{ row.latest_entry.original.message }}">原始底稿（不可用）</span>{% endif %}
               <span aria-hidden="true"> · </span>
-              {% if row.latest_entry.recalculated.available %}<a class="text-link" href="{{ row.latest_entry.recalculated.url }}">重算 XLSX</a>{% else %}<span class="muted" title="{{ row.latest_entry.recalculated.message }}">重算 XLSX（不可用）</span>{% endif %}
+              {% if row.latest_entry.recalculated.available %}<a class="text-link" href="{{ row.latest_entry.recalculated.url }}">计算后报表</a>{% else %}<span class="muted" title="{{ row.latest_entry.recalculated.message }}">计算后报表（不可用）</span>{% endif %}
             {% else %}
             <span class="muted">—</span>
             {% endif %}
@@ -152,7 +152,7 @@
                       <td>
                         {% if version.original.available %}<a class="text-link" href="{{ version.original.url }}">原始底稿</a>{% else %}<span class="muted" title="{{ version.original.message }}">原始不可用</span>{% endif %}
                         <span aria-hidden="true"> · </span>
-                        {% if version.recalculated.available %}<a class="text-link" href="{{ version.recalculated.url }}">重算 XLSX</a>{% else %}<span class="muted" title="{{ version.recalculated.message }}">重算不可用</span>{% endif %}
+                        {% if version.recalculated.available %}<a class="text-link" href="{{ version.recalculated.url }}">计算后报表</a>{% else %}<span class="muted" title="{{ version.recalculated.message }}">计算后报表不可用</span>{% endif %}
                       </td>
                     </tr>
                     {% endfor %}

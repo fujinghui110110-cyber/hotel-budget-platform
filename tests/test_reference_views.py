@@ -28,7 +28,7 @@ class ReferenceViewTests(TestCase):
         count = UploadVersion.objects.count()
         self.assertContains(self.client.get(reverse("reference_catalog")), "深圳凯骊酒店")
         response = self.client.get(reverse("reference_sheet", args=["SZKL", "sheet-001"]))
-        for text in ("0.00", "#REF!", "=[1]外部!A1", "不是重新计算或已批准预算"):
+        for text in ("0.00", "#REF!", "=[1]外部!A1", "不代表已批准预算"):
             self.assertContains(response, text)
         self.assertTrue(response.context["rows"][0]["cells"][2]["blank"])
         self.assertEqual(UploadVersion.objects.count(), count)

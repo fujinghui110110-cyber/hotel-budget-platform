@@ -1,4 +1,7 @@
 import calendar
+import json
+import tempfile
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.views import LoginView, LogoutView
@@ -109,14 +112,79 @@ def _full_report_baseline(report_code):
     return rows
 
 
+def _scenario_manifest_file(tempdir):
+    reports = {}
+    for report_code in REPORT_ROWS:
+        zz = report_code.startswith("PL_ZZ")
+        rules = ZZ_RULES if zz else TOTAL_RULES
+        month_cols = "FGHIJKLMNOPQ" if zz else "LMNOPQRSTUVW"
+        annual_col = "S" if zz else "J"
+        month_col = month_cols[0]
+        revpar_code = "R0014" if zz else "R0031"
+        mapping = []
+        for row_code, row in _full_report_baseline(report_code).items():
+            number = int(row_code[1:])
+            monthly_formula = ""
+            if number in rules:
+                parts = []
+                for dependency, sign in rules[number]:
+                    if not parts:
+                        prefix = "" if sign > 0 else "-"
+                    else:
+                        prefix = "+" if sign > 0 else "-"
+                    parts.append(f"{prefix}{month_col}{dependency}")
+                monthly_formula = "".join(parts)
+            if zz and row_code == "R0016":
+                monthly_formula = f"{month_col}101"
+            if zz and row_code == "R0105":
+                monthly_formula = f"+{month_col}103*0.04"
+            annual_formula = f"SUM({month_cols[0]}{number}:{month_cols[-1]}{number})"
+            aggregation = "SUM"
+            if row_code == REPORT_ROWS[report_code]["occ"]:
+                sold = int(REPORT_ROWS[report_code]["sold"][1:])
+                sellable = int(REPORT_ROWS[report_code]["sellable"][1:])
+                monthly_formula = f"IF({month_col}{sellable}=0,0,{month_col}{sold}/{month_col}{sellable})"
+                annual_formula = f"IF({annual_col}{sellable}=0,0,{annual_col}{sold}/{annual_col}{sellable})"
+                aggregation = "RATIO"
+            elif row_code == REPORT_ROWS[report_code]["adr"]:
+                sold = int(REPORT_ROWS[report_code]["sold"][1:])
+                room_rev = int(REPORT_ROWS[report_code]["room_rev"][1:])
+                monthly_formula = f"ROUND(IF({month_col}{sold}=0,0,{month_col}{room_rev}/{month_col}{sold}),2)"
+                annual_formula = f"ROUND(IF({annual_col}{sold}=0,0,{annual_col}{room_rev}/{annual_col}{sold}),2)"
+                aggregation = "DERIVED"
+            elif row_code == revpar_code:
+                sellable = int(REPORT_ROWS[report_code]["sellable"][1:])
+                room_rev = int(REPORT_ROWS[report_code]["room_rev"][1:])
+                monthly_formula = f"ROUND(IF({month_col}{sellable}=0,0,{month_col}{room_rev}/{month_col}{sellable}),2)"
+                annual_formula = f"ROUND(IF({annual_col}{sellable}=0,0,{annual_col}{room_rev}/{annual_col}{sellable}),2)"
+                aggregation = "DERIVED"
+            for cell, formula in ((f"{month_col}{number}", monthly_formula), (f"{annual_col}{number}", annual_formula)):
+                mapping.append({
+                    "row_code": row_code,
+                    "row_label": row_code,
+                    "cell": cell,
+                    "source": {"cell": cell},
+                    "formula": formula,
+                    "unit": row["unit"],
+                    "aggregation": aggregation,
+                })
+        reports[report_code] = {"mapping": mapping}
+    path = Path(tempdir) / "scenario_manifest.json"
+    path.write_text(json.dumps({"reports": reports}), encoding="utf-8")
+    return str(path)
+
+
 class ScenarioFixtureMixin:
     def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tempdir.cleanup)
+        manifest_path = _scenario_manifest_file(self.tempdir.name)
         User = get_user_model()
         self.admin = User.objects.create_user("scenario-admin", password="x", role="ADMIN", is_staff=True)
         self.project = Project.objects.create(code="P001", name="项目一")
         self.cycle = BudgetCycle.objects.create(name="2026", budget_year=2026, status=BudgetCycle.Status.ADJUSTING)
         self.template = TemplateVersion.objects.create(
-            version="SCENARIO-V1", budget_year=2026, file_path="template.xlsx", manifest_path="missing.json",
+            version="SCENARIO-V1", budget_year=2026, file_path="template.xlsx", manifest_path=manifest_path,
             formula_manifest_hash="0" * 64,
         )
         self.upload = UploadVersion.objects.create(

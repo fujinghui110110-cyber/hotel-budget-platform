@@ -8,7 +8,7 @@ from budgeting.models import REPORTS, NormalizedValue, Project
 
 
 class UploadForm(forms.Form):
-    file = forms.FileField(label="预算套表", help_text="仅允许 .xlsx，最大 50 MiB。")
+    file = forms.FileField(label="预算套表", help_text="支持 .xlsx、.xlsm，最大 50 MB。")
 
     def __init__(self, *args, cycle=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -18,9 +18,9 @@ class UploadForm(forms.Form):
 
     def clean_file(self):
         upload = self.cleaned_data["file"]
-        suffixes = (".xlsx", ".xlsm") if self.is_rehearsal else (".xlsx",)
+        suffixes = (".xlsx", ".xlsm")
         if not upload.name.lower().endswith(suffixes):
-            raise forms.ValidationError("仅允许上传 .xlsx 文件。")
+            raise forms.ValidationError("请选择 .xlsx 或 .xlsm 格式的 Excel 文件。")
         if upload.size > 50 * 1024 * 1024:
             raise forms.ValidationError("压缩文件超过 50 MiB。")
         return upload

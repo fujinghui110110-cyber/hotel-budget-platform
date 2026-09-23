@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
 from django.conf import settings
+from budgeting.services.template_paths import resolve_template_path
 from openpyxl import load_workbook
 from openpyxl.utils.cell import coordinate_to_tuple, get_column_letter
 
@@ -133,6 +134,10 @@ def extract_report_values(upload, workbook_path, validation_run=None):
                 continue
             value = values.get(_cell_key(cell_ref))
             formula = formulas.get(_cell_key(cell_ref), "")
+            # Confirmed budget policy: a mapped non-formula blank input means zero.
+            # A formula without its numeric cache must still fail validation.
+            if value in (None, "") and not formula:
+                value = 0
             if strict and (value is None or value == "" or isinstance(value, str) and value.startswith("#")):
                 if validation_run is not None:
                     ValidationIssue.objects.create(
@@ -217,7 +222,7 @@ def assign_dimensions(value, budget_year):
 def _load_manifest(upload):
     if not upload.template or not upload.template.manifest_path:
         return {"reports": {}}
-    manifest_path = Path(upload.template.manifest_path)
+    manifest_path = resolve_template_path(upload.template.manifest_path)
     if not manifest_path.is_absolute():
         manifest_path = Path(settings.BASE_DIR) / manifest_path
     if not manifest_path.exists():

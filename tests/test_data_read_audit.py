@@ -10,6 +10,50 @@ from budgeting.services.data_read_audit import build_upload_audit
 
 
 class DataReadAuditTests(TestCase):
+    def test_blank_inputs_imported_as_zero_are_not_an_empty_report(self):
+        for row in range(1, 5):
+            NormalizedValue.objects.create(upload=self.upload, report_code='PL_TOTAL_WINE',
+                                           row_code=f'R{row}', period='YEAR', unit='MONEY',
+                                           value_int=0, source_sheet='汇总', source_cell=f'B{row}')
+        result = self.audit([self.cell(row, None) for row in range(1, 5)])
+        self.assertEqual(result['summary']['read_cells'], 4)
+        self.assertEqual(result['summary']['missing_cells'], 0)
+        self.assertEqual(result['issues'], [])
+
+    def test_rejected_budget_groups_present_values_and_blank_zero_but_keeps_errors(self):
+        self.upload.status = UploadVersion.Status.REJECTED
+        self.upload.save()
+        result = self.audit([self.cell(1, 0), self.cell(2, 100), self.cell(3, None),
+                             self.cell(4, '#REF!', error_status='#REF!')])
+        self.assertEqual(result['summary']['read_cells'], 0)
+        self.assertEqual(result['summary']['withheld_cells'], 3)
+        self.assertEqual(result['summary']['missing_cells'], 1)
+        self.assertEqual([item['reason_code'] for item in result['issues']],
+                         ['CACHE_ERROR', 'VALIDATION_NOT_ADOPTED'])
+
+    def test_business_validation_failure_keeps_source_audit(self):
+        from budgeting.models import ValidationRun, ValidationIssue
+        self.upload.status = UploadVersion.Status.REJECTED
+        self.upload.save()
+        run = ValidationRun.objects.create(upload=self.upload, rule_version='test')
+        ValidationIssue.objects.create(run=run, severity='P0', code='REPORT_VALUE_MISSING', message='缺少业务输入')
+        result = self.audit([self.cell(1, None), self.cell(2, 100)])
+        self.assertNotIn('VALIDATION_BLOCKED', result['summary']['reason_counts'])
+        self.assertIn('VALIDATION_NOT_ADOPTED', result['summary']['reason_counts'])
+
+    def test_rejected_unread_file_reports_validation_root_cause_only(self):
+        from budgeting.models import ValidationRun, ValidationIssue
+        self.upload.status = UploadVersion.Status.REJECTED
+        self.upload.save()
+        run = ValidationRun.objects.create(upload=self.upload, rule_version='test')
+        ValidationIssue.objects.create(run=run, severity='P0', code='ZIP_TRAVERSAL', message='../bad/')
+        with patch('budgeting.services.data_read_audit.read_workbook') as reader:
+            result = build_upload_audit(self.upload, refresh=True)
+        reader.assert_not_called()
+        self.assertEqual(result['summary']['missing_cells'], 0)
+        self.assertEqual(len(result['issues']), 1)
+        self.assertIn('ZIP_TRAVERSAL', result['issues'][0]['message'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -41,9 +85,9 @@ class DataReadAuditTests(TestCase):
         self.assertEqual(result['issues'][0]['row_code'], 'R2')
         self.assertEqual(result['issues'][0]['reason_code'], 'NORMALIZED_MISSING')
 
-    def test_cache_error_formula_without_cache_and_blank_are_distinct(self):
+    def test_error_and_missing_formula_cache_are_not_blank_zero(self):
         result = self.audit([self.cell(1, '#REF!', error_status='#REF!'), self.cell(2, None, is_formula=True), self.cell(3, None), self.cell(4, 1)])
-        self.assertEqual([i['reason_code'] for i in result['issues']], ['CACHE_ERROR', 'FORMULA_CACHE_MISSING', 'CELL_EMPTY', 'NORMALIZED_MISSING'])
+        self.assertEqual([i['reason_code'] for i in result['issues']], ['CACHE_ERROR', 'FORMULA_CACHE_MISSING', 'NORMALIZED_MISSING', 'NORMALIZED_MISSING'])
 
     def test_missing_report_and_empty_report_are_distinct(self):
         missing = self.audit(sheets=[])

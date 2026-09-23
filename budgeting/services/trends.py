@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from django.db.models import F
+from budgeting.services.project_scope import cycle_projects
 from decimal import Decimal, ROUND_HALF_UP
 
 from budgeting.models import NormalizedValue, Project, ProjectCycle, UploadVersion
@@ -24,7 +26,8 @@ def approved_current_uploads(cycle, project_id=None):
             cycle=cycle,
             current_upload__cycle=cycle,
             current_upload__status=UploadVersion.Status.APPROVED,
-            project__is_active=True,
+            project_id__in=cycle_projects(cycle).values("pk"),
+            current_upload__project_id=F("project_id"),
         )
         .select_related("project", "current_upload")
         .order_by("project__code")
@@ -40,7 +43,7 @@ def latest_report_uploads(cycle, project_id=None):
 
     if not cycle:
         return []
-    projects = Project.objects.filter(is_active=True).order_by("code")
+    projects = cycle_projects(cycle)
     if project_id:
         projects = projects.filter(pk=project_id)
     result = []
@@ -316,9 +319,9 @@ def build_trend(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WINE",
     display_unit = normalize_display_unit(metric, display_unit)
     uploads = (latest_report_uploads if data_scope == "latest" else approved_current_uploads)(cycle, project_id=project_id)
     rows_by_upload = _load_rows(uploads, metric, report_code)
-    active_count = Project.objects.filter(is_active=True).count()
+    active_count = cycle_projects(cycle).count()
     if project_id:
-        active_count = Project.objects.filter(pk=project_id, is_active=True).count()
+        active_count = cycle_projects(cycle).filter(pk=project_id).count()
     periods = rolling_years(cycle.budget_year) if cycle else []
     series = []
     annual = []
@@ -473,9 +476,9 @@ def build_drilldown(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WI
             "sources": [_source_detail(row) for row in source_rows],
         })
     included = sum(1 for item in projects if item["included"])
-    active_count = Project.objects.filter(is_active=True).count()
+    active_count = cycle_projects(cycle).count()
     if project_id:
-        active_count = Project.objects.filter(pk=project_id, is_active=True).count()
+        active_count = cycle_projects(cycle).filter(pk=project_id).count()
     return {
         "metric": metric_code,
         "metric_label": metric.get("label", metric_code),

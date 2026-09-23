@@ -8,6 +8,7 @@ from budgeting.models import BudgetCycle, BudgetScenario, Project, REPORTS
 from budgeting.scenario_views import _admin_required, _cycle_from_request
 from budgeting.services.scenarios import ScenarioError
 from budgeting.services.budget_versions import selected_project_upload
+from budgeting.services.project_scope import cycle_projects
 
 
 def _display(value, unit):
@@ -19,7 +20,7 @@ def _display(value, unit):
 
 
 def _baselines(cycle):
-    return {project.pk: selected_project_upload(project, cycle) for project in Project.objects.filter(is_active=True)}
+    return {project.pk: selected_project_upload(project, cycle) for project in cycle_projects(cycle)}
 
 
 def _editor_context(scenario, *, error="", posted=None):
@@ -73,7 +74,7 @@ def summary_list(request):
             return redirect("summary_detail", scenario_id=scenario.pk)
         except (ScenarioError, PermissionError, ValueError) as exc:
             error = str(exc)
-    projects = [{"project": project, "upload": baselines.get(project.pk)} for project in Project.objects.filter(is_active=True)]
+    projects = [{"project": project, "upload": baselines.get(project.pk)} for project in cycle_projects(cycle)]
     scenarios = BudgetScenario.objects.filter(baseline__cycle=cycle, inputs__kind="summary_annual").select_related("baseline__project").order_by("-updated_at")
     return render(request, "budgeting/summary_list.html", {
         "cycle": cycle, "cycles": BudgetCycle.objects.order_by("-budget_year", "-revision_no"),

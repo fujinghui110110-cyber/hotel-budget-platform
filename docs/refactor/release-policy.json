@@ -1,0 +1,50 @@
+{
+  "database_schema_read_range": [
+    16,
+    16
+  ],
+  "database_schema_write_range": [
+    16,
+    16
+  ],
+  "upgrade_from_schema_range": [
+    11,
+    16
+  ],
+  "capabilities": [
+    "annual-targets-v1",
+    "locked-history-v1"
+  ],
+  "required_capabilities": [
+    "annual-targets-v1",
+    "locked-history-v1"
+  ],
+  "migration_ids": [
+    "0001_initial",
+    "0002_budgetcycle_template",
+    "0003_adjustmentbatch_cascade_adjustmentbatch_driver_and_more",
+    "0004_remove_adjustmentline_uniq_adjustment_project",
+    "0005_cockpit_dimensions",
+    "0006_backfill_dimensions",
+    "0007_budget_cycle_rehearsal_source",
+    "0008_indicatorproject_specialindicatorbatch_and_more",
+    "0009_specialindicatorbatch_unique_active_special_actual_and_more",
+    "0010_historical_sources",
+    "0011_independent_history_cache",
+    "0012_processing_runs",
+    "0013_annual_plan_history",
+    "0014_annual_targets",
+    "0015_management_metric_history",
+    "0016_budget_template_file"
+  ],
+  "supported_python": [
+    "3.13"
+  ],
+  "rollback": {
+    "mode": "code_only_when_compatible"
+  },
+  "acceptance": {
+    "macos": "LOCAL_TESTS",
+    "windows": "CI_REQUIRED"
+  }
+}

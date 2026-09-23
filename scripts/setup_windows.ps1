@@ -85,7 +85,9 @@ $soffice = Find-LibreOffice
 if (-not $soffice) {
     $installer = Get-Installer $manifest.libreoffice
     Write-Host 'Installing LibreOffice. Windows may request administrator approval.'
-    $process = Start-Process -FilePath 'msiexec.exe' -Verb RunAs -ArgumentList @('/i', "`"$installer`"", '/passive', '/norestart') -Wait -PassThru
+    $approval = Read-Host 'LibreOffice requires Windows administrator approval. Install now? Type YES to continue'
+  if ($approval -ne 'YES') { throw 'LibreOffice installation cancelled. Install manually and run setup again.' }
+  $process = Start-Process -FilePath 'msiexec.exe' -Verb RunAs -ArgumentList @('/i', "`"$installer`"", '/passive', '/norestart') -Wait -PassThru
     if ($process.ExitCode -notin @(0, 3010)) { throw "LibreOffice installation failed: $($process.ExitCode)" }
     $soffice = Find-LibreOffice
     if (-not $soffice) { throw 'LibreOffice installation completed but soffice.exe was not found.' }
@@ -100,5 +102,4 @@ if (-not (Test-Path $cloudflared)) {
 $env:SOFFICE_BIN = $soffice
 & $python scripts\setup_local.py
 Assert-Success 'Local initialization'
-& $python scripts\local_server.py start --open --port 8768
-Assert-Success 'Server startup'
+Write-Host 'Setup complete. The one-click launcher will now open the system.'

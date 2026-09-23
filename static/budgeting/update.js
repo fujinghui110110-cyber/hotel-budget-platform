@@ -22,6 +22,7 @@
     byId('update-save').disabled = busy;
     byId('update-retry').hidden = known;
     byId('update-retry').disabled = posting;
+    if (byId('update-backup')) byId('update-backup').textContent = state.backup_status || '尚无新版升级备份';
     showError(actionError || state.error || '');
   }
   async function request(url, options = {}, timeout = 12000) {
@@ -75,6 +76,7 @@
       render({...lastState, busy: false});
     } finally { posting = false; timer = window.setTimeout(refresh, 1500); }
   }
+  byId('update-rollback-form')?.addEventListener('submit', event => submit(event, false));
   byId('update-form').addEventListener('submit', event => submit(event, false));
   byId('update-config-form').addEventListener('submit', event => submit(event, true));
   byId('update-retry').addEventListener('click', refresh);

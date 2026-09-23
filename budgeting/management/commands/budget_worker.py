@@ -8,6 +8,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from budgeting.models import ProcessingJob, UploadVersion
+from budgeting.services.processing_runs import ensure_job_run, mark_run_failed, mark_run_running
 from budgeting.services.workflow import InfrastructureProcessingError, process_upload
 
 
@@ -20,19 +21,30 @@ class Command(BaseCommand):
         parser.add_argument("--lease-seconds", type=int, default=240)
 
     def handle(self, *args, **options):
-        while True:
-            if (settings.BASE_DIR / '.runtime/update-maintenance').exists():
-                if options["once"]:
-                    break
-                time.sleep(options["sleep"])
-                continue
-            job = self._claim_job(options["lease_seconds"])
-            if job:
-                self._run_job(job)
-            elif options["once"]:
-                return
-            else:
-                time.sleep(options["sleep"])
+        import os
+        from pathlib import Path
+        from budgeting.services.worker_heartbeat import WorkerHeartbeat
+        runtime = Path(os.getenv("BUDGET_RUNTIME_ROOT", settings.BASE_DIR / ".runtime"))
+        with WorkerHeartbeat() as heartbeat:
+            while True:
+                if (runtime / 'update-maintenance').exists():
+                    if options["once"]:
+                        break
+                    time.sleep(options["sleep"])
+                    continue
+                job = self._claim_job(options["lease_seconds"])
+                if job:
+                    heartbeat.state = "PROCESSING"
+                    heartbeat.job_id = job.pk
+                    heartbeat.write()
+                    self._run_job(job)
+                    heartbeat.job_id = None
+                    heartbeat.state = "IDLE"
+                elif options["once"]:
+                    return
+                else:
+                    time.sleep(options["sleep"])
+
 
     def _claim_job(self, lease_seconds):
         for attempt in range(5):
@@ -84,6 +96,7 @@ class Command(BaseCommand):
         upload.status = UploadVersion.Status.PROCESSING
         upload.save(update_fields=["status"])
         try:
+            ensure_job_run(job)
             process_upload(upload)
         except InfrastructureProcessingError as exc:
             if job.attempts < 2:
@@ -93,12 +106,14 @@ class Command(BaseCommand):
                 upload.status = UploadVersion.Status.REJECTED
                 upload.note = str(exc)
                 upload.save(update_fields=["status", "note"])
+                mark_run_failed(job.processing_run, str(exc))
                 job.status = ProcessingJob.Status.FAILED
                 job.error = str(exc)
         except Exception as exc:
             upload.status = UploadVersion.Status.REJECTED
             upload.note = str(exc)
             upload.save(update_fields=["status", "note"])
+            mark_run_failed(job.processing_run, str(exc))
             job.status = ProcessingJob.Status.FAILED
             job.error = str(exc)
         else:

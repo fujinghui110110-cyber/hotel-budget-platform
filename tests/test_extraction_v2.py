@@ -30,6 +30,22 @@ class ExtractionV2Tests(TestCase):
             self.assertEqual(extract_report_values(upload, root / "recalc.xlsx", run), 0)
             self.assertTrue(run.issues.filter(code="REPORT_VALUE_MISSING", severity="P0").exists())
             self.assertFalse(NormalizedValue.objects.filter(upload=upload).exists())
+
+            # A genuine blank mapped input is zero; unlike an uncalculated formula.
+            workbook.active["L32"] = None
+            workbook.save(root / "recalc.xlsx")
+            run.issues.all().delete()
+            self.assertEqual(extract_report_values(upload, root / "recalc.xlsx", run), 1)
+            blank_value = NormalizedValue.objects.get(upload=upload)
+            self.assertEqual(blank_value.value_int, 0)
+            self.assertEqual(blank_value.source_cell, "L32")
+            self.assertEqual(blank_value.source_formula, "")
+            self.assertFalse(run.issues.exists())
+
+            workbook.active["L32"] = "#REF!"
+            workbook.save(root / "recalc.xlsx")
+            self.assertEqual(extract_report_values(upload, root / "recalc.xlsx", run), 0)
+            self.assertTrue(run.issues.filter(code="REPORT_VALUE_MISSING").exists())
             manifest["reports"]["PL_TOTAL_WINE"]["mapping"][0]["unit"] = "COUNT"
             (root / "manifest.json").write_text(json.dumps(manifest))
             workbook.active["L32"] = 1.5

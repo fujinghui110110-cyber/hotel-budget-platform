@@ -8,6 +8,7 @@
 {% endblock %}
 
 {% block content %}
+{% include 'budgeting/includes/annual_targets_link.html' with target_project=project %}
   {% url 'report_catalog' as report_catalog_url %}
   <link rel="stylesheet" href="{% static 'budgeting/cockpit.css' %}">
 

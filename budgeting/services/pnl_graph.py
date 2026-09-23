@@ -9,15 +9,15 @@ annual formula (RATIO/DERIVED rows like OCC / ADR / RevPAR).
 
 Formula grammar (very small, verified against the manifest):
   cell ref ``L41``, vertical range ``L45:L48``, ``SUM(...)``/``AVERAGE(...)``,
-  cross-sheet leaf ref ``Sheet!K22`` (or ``'Sheet'!K22``) — treated as an
-  external constant, ``+ - * /``, ``ROUND(x,n)``, ``IF(a=0,0,b)``,
-  ``IFERROR(x,0)``, integer literals.
+  cross-sheet leaf ref ``Sheet!K22`` (or ``'Sheet'!K22``) — only with an
+  explicit verified external constant, ``+ - * /``, ``ROUND(x,n)``,
+  ``IF(a=0,0,b)``, ``IFERROR(x,0)``, integer literals.
 """
 
 import re
 from decimal import Decimal, ROUND_HALF_UP
 
-from budgeting.excel.money import cents_to_yuan, yuan_to_cents
+from budgeting.excel.money import cents_to_yuan, largest_remainder, yuan_to_cents
 
 RATIO_SCALE = 10_000
 MONTH_COLS = "LMNOPQRSTUVW"
@@ -28,11 +28,13 @@ MONTHS = [f"{i:02d}" for i in range(1, 13)]
 
 # ``Sheet!Ref`` (quoted or unquoted sheet name, cell or ``cell:cell`` range).
 CROSS_REF = re.compile(r"(?:'[^']*'|[A-Za-z0-9_一-鿿()（）\-]+)![A-Z]+\d+(?::[A-Z]+\d+)?")
+_EXTERNAL_REF = re.compile(r"(?P<sheet>'[^']*'|[A-Za-z0-9_一-鿿()（）\-]+)!(?P<start>[A-Z]+\d+)(?::(?P<end>[A-Z]+\d+))?")
 _CELL = re.compile(r"([A-Z]+)(\d+)")
 
 _TOKEN_RE = re.compile(
     r"""
-      (?P<num>\d+(?:\.\d+)?)
+      (?P<xref>(?:'[^']*'|[A-Za-z0-9_一-鿿()（）\-]+)![A-Z]+\d+(?::[A-Z]+\d+)?)
+    | (?P<num>\d+(?:\.\d+)?)
     | (?P<cell>[A-Z]+\d+(?::[A-Z]+\d+)?)
     | (?P<func>[A-Za-z]+)
     | (?P<op>[+\-*/=])
@@ -47,9 +49,8 @@ _TOKEN_RE = re.compile(
 def load_manifest(template=None):
     """Return the manifest dict for ``template`` (or the active template)."""
     import json
-    from pathlib import Path
 
-    from django.conf import settings
+    from budgeting.services.template_paths import resolve_template_path
 
     if template is None:
         from budgeting.services.workflow import active_template
@@ -57,9 +58,7 @@ def load_manifest(template=None):
         template = active_template()
     if not template or not template.manifest_path:
         return {"reports": {}}
-    path = Path(template.manifest_path)
-    if not path.is_absolute():
-        path = Path(settings.BASE_DIR) / path
+    path = resolve_template_path(template.manifest_path)
     if not path.exists():
         return {"reports": {}}
     return json.loads(path.read_text(encoding="utf-8"))
@@ -154,7 +153,7 @@ def _topo_order(rows):
 
 
 def _tokenize(formula):
-    formula = CROSS_REF.sub("0", formula).replace("++", "+")
+    formula = formula.replace("++", "+")
     tokens = []
     pos = 0
     while pos < len(formula):
@@ -167,8 +166,10 @@ def _tokenize(formula):
         pos = m.end()
         kind = m.lastgroup
         val = m.group()
-        if kind == "num":
-            tokens.append(("num", float(val)))
+        if kind == "xref":
+            tokens.append(("xref", val))
+        elif kind == "num":
+            tokens.append(("num", Decimal(val)))
         elif kind == "cell":
             mm = _CELL.match(val)
             col, row = mm.group(1), int(mm.group(2))
@@ -241,6 +242,9 @@ class _Parser:
         if t[0] == "num":
             self.next()
             return ("num", t[1])
+        if t[0] == "xref":
+            self.next()
+            return ("xref", t[1])
         if t[0] == "cell":
             self.next()
             return ("cell", t[1], t[2])
@@ -278,23 +282,39 @@ def parse_formula(formula):
 
 # --- evaluation ------------------------------------------------------------
 
-_FUNCS = {"SUM", "AVERAGE", "ROUND", "IF", "IFERROR", "ISERROR"}
+_FUNCS = {"SUM", "AVERAGE", "COUNT", "ROUND", "IF", "IFERROR", "ISERROR"}
 
 
-def _eval(node, cell_fn, range_fn):
+def _to_decimal(value):
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value or 0))
+
+
+def _excel_round(value, places):
+    places = int(_to_decimal(places))
+    quantum = Decimal("1").scaleb(-places)
+    return _to_decimal(value).quantize(quantum, rounding=ROUND_HALF_UP)
+
+
+def _eval(node, cell_fn, range_fn, external_fn=None):
     kind = node[0]
     if kind == "num":
         return node[1]
+    if kind == "xref":
+        if external_fn is None:
+            raise ValueError("公式包含未验证外部引用：" + node[1])
+        return external_fn(node[1])
     if kind == "cell":
         return cell_fn(node[1], node[2])
     if kind == "range":
         return range_fn(node[1], node[2], node[3], node[4])
     if kind == "neg":
-        return -_eval(node[1], cell_fn, range_fn)
+        return -_eval(node[1], cell_fn, range_fn, external_fn)
     if kind == "binop":
         op = node[1]
-        a = _eval(node[2], cell_fn, range_fn)
-        b = _eval(node[3], cell_fn, range_fn)
+        a = _eval(node[2], cell_fn, range_fn, external_fn)
+        b = _eval(node[3], cell_fn, range_fn, external_fn)
         if op == "+":
             return a + b
         if op == "-":
@@ -304,30 +324,36 @@ def _eval(node, cell_fn, range_fn):
         if op == "/":
             return a / b
         if op == "=":
-            return 1.0 if a == b else 0.0
+            return Decimal(1) if a == b else Decimal(0)
     if kind == "func":
         name, args = node[1], node[2]
         if name == "SUM":
-            return sum(_flatten(_eval(a, cell_fn, range_fn) for a in args))
+            return sum(_flatten(_eval(a, cell_fn, range_fn, external_fn) for a in args), Decimal(0))
         if name == "AVERAGE":
-            vals = list(_flatten(_eval(a, cell_fn, range_fn) for a in args))
-            return sum(vals) / len(vals) if vals else 0
+            vals = list(_flatten(_eval(a, cell_fn, range_fn, external_fn) for a in args))
+            return sum(vals, Decimal(0)) / Decimal(len(vals)) if vals else Decimal(0)
+        if name == "COUNT":
+            vals = list(_flatten(_eval(a, cell_fn, range_fn, external_fn) for a in args))
+            return Decimal(sum(1 for value in vals if value is not None))
         if name == "ROUND":
-            return round(_eval(args[0], cell_fn, range_fn), int(_eval(args[1], cell_fn, range_fn)))
+            return _excel_round(
+                _eval(args[0], cell_fn, range_fn, external_fn),
+                _eval(args[1], cell_fn, range_fn, external_fn),
+            )
         if name == "IF":
-            cond = _eval(args[0], cell_fn, range_fn)
-            return _eval(args[1], cell_fn, range_fn) if cond else _eval(args[2], cell_fn, range_fn)
+            cond = _eval(args[0], cell_fn, range_fn, external_fn)
+            return _eval(args[1], cell_fn, range_fn, external_fn) if cond else _eval(args[2], cell_fn, range_fn, external_fn)
         if name == "IFERROR":
             try:
-                return _eval(args[0], cell_fn, range_fn)
+                return _eval(args[0], cell_fn, range_fn, external_fn)
             except (ZeroDivisionError, ValueError):
-                return _eval(args[1], cell_fn, range_fn)
+                return _eval(args[1], cell_fn, range_fn, external_fn)
         if name == "ISERROR":
             try:
-                _eval(args[0], cell_fn, range_fn)
+                _eval(args[0], cell_fn, range_fn, external_fn)
             except (ZeroDivisionError, ValueError):
-                return 1.0
-            return 0.0
+                return Decimal(1)
+            return Decimal(0)
     raise ValueError("无法求值节点：" + repr(node))
 
 
@@ -347,73 +373,232 @@ def _numeric(value_int, ratio_num, ratio_den):
     return value_int
 
 
-def recompute(rows, num_to_code, values, overrides=None):
+def _as_stored(unit, value):
+    if unit == "MONEY":
+        return int(_to_decimal(value).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    if unit == "COUNT":
+        return int(_to_decimal(value).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return _to_decimal(value)
+
+
+def _assert_equal_stored(unit, actual, expected, row_code, period):
+    if _as_stored(unit, actual) != _as_stored(unit, expected):
+        raise ValueError(
+            f"公式勾稽不平：{row_code} {period} 存量={expected}，公式={actual}"
+        )
+
+
+def _external_lookup(external_values):
+    external_values = external_values or {}
+
+    def lookup(ref):
+        if ref not in external_values:
+            raise ValueError("公式包含未验证外部引用：" + ref)
+        value = external_values[ref]
+        if isinstance(value, (list, tuple)):
+            return [_to_decimal(v) for v in value]
+        return _to_decimal(value)
+
+    return lookup
+
+
+def _allocate_year_to_months(row, current_months, target):
+    if row["unit"] == "RATIO":
+        raise ValueError("比例指标年度值不能自动摊月：" + row["label"])
+    target_int = int(_to_decimal(target).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    base_year = sum(int(_to_decimal(current_months[p])) for p in MONTHS)
+    delta = target_int - base_year
+    allocation = largest_remainder(delta, {p: current_months[p] for p in MONTHS})
+    return {p: int(_to_decimal(current_months[p])) + allocation[p] for p in MONTHS}
+
+
+def _affected_rows(rows, overrides):
+    affected = {rc for rc in overrides if rc in rows}
+    changed = True
+    while changed:
+        changed = False
+        for rc, row in rows.items():
+            if rc not in affected and any(dep in affected for dep in row["deps"]):
+                affected.add(rc)
+                changed = True
+    return affected
+
+
+def _normal_formula(formula):
+    return re.sub(r"\s+", "", str(formula or "").lstrip("=")).upper()
+
+
+def _rounded_month_sum_formula(row_num, month_cols):
+    terms = ",".join(f"ROUND({column}{row_num},2)" for column in month_cols)
+    return f"ROUND(SUM({terms}),2)"
+
+
+def annual_formula_overrides_rollup(row):
+    """Whether an annual formula carries semantics beyond normal month rollup."""
+    formula = _normal_formula(row.get("annual"))
+    if not formula:
+        return False
+    row_num = row.get("row_num")
+    if not row_num:
+        return True
+    monthly_columns = ZZ_MONTH_COLS if "F" in formula or "Q" in formula else MONTH_COLS
+    first, last = monthly_columns[0], monthly_columns[-1]
+    simple_rollups = {
+        f"SUM({first}{row_num}:{last}{row_num})",
+        f"AVERAGE({first}{row_num}:{last}{row_num})",
+        f"ROUND(AVERAGE({first}{row_num}:{last}{row_num}),0)",
+        _rounded_month_sum_formula(row_num, monthly_columns),
+    }
+    return formula not in simple_rollups
+
+
+def external_refs_for_rows(rows, row_codes=None):
+    """Return workbook external references used by selected row formulas.
+
+    The result is ordered and de-duplicated.  It is intentionally only a
+    reference inventory; callers must still provide explicit values.
+    """
+    selected = set(row_codes) if row_codes is not None else set(rows)
+    refs = []
+    for rc, row in rows.items():
+        if rc not in selected:
+            continue
+        for formula in (row.get("monthly") or "", row.get("annual") or ""):
+            refs.extend(CROSS_REF.findall(formula))
+    return tuple(dict.fromkeys(refs))
+
+
+def required_external_refs(rows, overrides=None):
+    """Return external refs needed for this recompute scope.
+
+    With overrides, only formulas affected by edited rows are considered, so an
+    unrelated unknown cross-sheet formula does not block a local edit.  Without
+    overrides, all formulas are considered for baseline validation.
+    """
+    affected = _affected_rows(rows, overrides or {}) if overrides else set(rows)
+    return external_refs_for_rows(rows, affected)
+
+
+def build_external_values(rows, overrides=None, provided=None):
+    """Build an explicit ``external_values`` map for ``recompute``.
+
+    ``provided`` is the only accepted source of cross-sheet values.  Missing
+    affected references are reported instead of being treated as zero.
+    """
+    provided = provided or {}
+    required = required_external_refs(rows, overrides)
+    missing = [ref for ref in required if ref not in provided]
+    if missing:
+        raise ValueError("公式包含未验证外部引用：" + ",".join(missing))
+    return {ref: provided[ref] for ref in required}
+
+
+def _split_external_ref(ref):
+    match = _EXTERNAL_REF.fullmatch(ref)
+    if not match:
+        raise ValueError("无法解析外部引用：" + str(ref))
+    sheet = match.group("sheet")
+    if sheet.startswith("'") and sheet.endswith("'"):
+        sheet = sheet[1:-1]
+    return sheet, match.group("start"), match.group("end")
+
+
+def _external_cell_sequence(start, end=None):
+    if not end:
+        return [start]
+    start_match = _CELL.fullmatch(start)
+    end_match = _CELL.fullmatch(end)
+    if not start_match or not end_match:
+        raise ValueError("无法解析外部引用区间：" + start + ":" + end)
+    start_col, start_row = start_match.group(1), int(start_match.group(2))
+    end_col, end_row = end_match.group(1), int(end_match.group(2))
+    if start_col != end_col:
+        raise ValueError("UNVERIFIED跨表横向区间引用：" + start + ":" + end)
+    step = 1 if end_row >= start_row else -1
+    return [f"{start_col}{row}" for row in range(start_row, end_row + step, step)]
+
+
+def _normalized_external_value(value):
+    unit = str(value.unit).upper()
+    if unit == "RATIO":
+        if value.ratio_den:
+            return Decimal(value.ratio_num or 0) / Decimal(value.ratio_den)
+        return Decimal(value.value_int or 0) / Decimal(RATIO_SCALE)
+    return Decimal(value.value_int or 0)
+
+
+def load_external_values(upload, refs):
+    """Load verified cross-sheet values from the upload's normalized cache.
+
+    Provider source: ``NormalizedValue`` rows from the same ``UploadVersion``,
+    matched by ``source_sheet`` and ``source_cell``. Missing refs remain
+    blocking and are reported as ``UNVERIFIED``.
+    """
+    refs = tuple(dict.fromkeys(refs or ()))
+    if not refs:
+        return {}
+    try:
+        from budgeting.models import NormalizedValue
+    except Exception as exc:  # pragma: no cover - import guard for non-Django use
+        raise ValueError("UNVERIFIED外部引用：无法读取归一化缓存") from exc
+
+    requested = []
+    for ref in refs:
+        sheet, start, end = _split_external_ref(ref)
+        requested.append((ref, sheet, _external_cell_sequence(start, end)))
+
+    sheets = {sheet for _ref, sheet, _cells in requested}
+    cells = {cell for _ref, _sheet, ref_cells in requested for cell in ref_cells}
+    queryset = NormalizedValue.objects.filter(upload=upload, source_sheet__in=sheets, source_cell__in=cells)
+    by_location = {}
+    for value in queryset.order_by("source_sheet", "source_cell", "id"):
+        by_location[(value.source_sheet, value.source_cell)] = _normalized_external_value(value)
+
+    result = {}
+    missing = []
+    for ref, sheet, ref_cells in requested:
+        values = []
+        for cell in ref_cells:
+            key = (sheet, cell)
+            if key not in by_location:
+                missing.append(ref if len(ref_cells) == 1 else f"{sheet}!{cell}")
+                continue
+            values.append(by_location[key])
+        if len(values) == len(ref_cells):
+            result[ref] = values[0] if len(values) == 1 else values
+    if missing:
+        raise ValueError("UNVERIFIED外部引用缺少归一化来源：" + ",".join(dict.fromkeys(missing)))
+    return result
+
+
+def recompute(rows, num_to_code, values, overrides=None, *, external_values=None, allow_year_allocation=False):
     """Recompute all rows.
 
     ``values`` / ``overrides``: ``{row_code: {period: numeric}}`` where periods
-    are ``01..12`` and ``YEAR``.  A ``YEAR`` override on a leaf scales its 12
-    months proportionally so the annual matches the target.  Returns
+    are ``01..12`` and ``YEAR``.  A ``YEAR`` override is accepted only when
+    ``allow_year_allocation`` is true; that path uses largest-remainder cent
+    allocation and is reserved for explicit auxiliary allocation, not formal
+    annual target dispatch.  Returns
     ``{row_code: {period: numeric}}``.
-
-    Derived rows are evaluated as ``F_same(new) + residual`` where ``residual =
-    baseline - F_same(baseline)`` folds every cross-sheet (external) constant
-    and any baseline rounding into one number.  This keeps unchanged rows
-    *exactly* at their baseline and handles mixed rows like R0075
-    (``E3市场销售!K29 - L74 + 明细表!L75``).
     """
     overrides = overrides or {}
-    baseline = {rc: {p: values.get(rc, {}).get(p, 0) for p in MONTHS} for rc in rows}
+    external_fn = _external_lookup(external_values)
+    baseline = {rc: {p: _to_decimal(values.get(rc, {}).get(p, 0)) for p in MONTHS} for rc in rows}
     months = {rc: dict(baseline[rc]) for rc in rows}
 
-    # Apply leaf overrides: month edits directly; a YEAR edit scales months.
     for rc, per in overrides.items():
         if rc not in rows:
             raise ValueError("未知行代码：" + rc)
         if "YEAR" in per:
-            target = per["YEAR"]
-            base_year = sum(float(months[rc][p]) for p in MONTHS)
-            if base_year:
-                factor = target / base_year
-                months[rc] = {p: int(round(months[rc][p] * factor)) for p in MONTHS}
-            else:
-                months[rc] = {p: target / 12.0 for p in MONTHS}
+            if not allow_year_allocation:
+                raise ValueError("年度目标不会自动摊月；请显式调用辅助分摊后下发月度值")
+            months[rc] = _allocate_year_to_months(rows[rc], months[rc], per["YEAR"])
         for p, v in per.items():
             if p != "YEAR":
-                months[rc][p] = v
+                months[rc][p] = _to_decimal(v)
 
     topo = _topo_order(rows)
-
-    # Residual = baseline - F_same(baseline), evaluated against baseline values.
-    residual = {rc: {} for rc in rows}
-    for rc in topo:
-        r = rows[rc]
-        if r["kind"] != "derived":
-            continue
-        ast = parse_formula(r["monthly"])
-        for month in MONTHS:
-            f_base = _eval(
-                ast,
-                lambda col, row, month=month: baseline.get(num_to_code.get(row), {}).get(month, 0),
-                lambda c1, r1, c2, r2, month=month: _range_values(baseline, num_to_code, c1, r1, c2, r2, month),
-            )
-            residual[rc][month] = baseline[rc][month] - f_base
-
-    # Annual residual for RATIO/DERIVED rows, so an unchanged row's YEAR stays
-    # exactly at baseline even when the seed/annual formula is not self-consistent.
-    annual_residual = {rc: 0 for rc in rows}
-    for rc in topo:
-        r = rows[rc]
-        if r["kind"] != "derived":
-            continue
-        if r["aggregation"] in ("SUM", "AVERAGE"):
-            continue
-        ast = parse_formula(r["annual"])
-        f_base = _eval(
-            ast,
-            lambda col, row: values.get(num_to_code.get(row), {}).get("YEAR", 0),
-            lambda c1, r1, c2, r2: _annual_range(rows, num_to_code, values, c1, r1, c2, r2),
-        )
-        annual_residual[rc] = values.get(rc, {}).get("YEAR", 0) - f_base
+    affected = _affected_rows(rows, overrides) if overrides else set(rows)
 
     result = {rc: {} for rc in rows}
 
@@ -424,36 +609,54 @@ def recompute(rows, num_to_code, values, overrides=None):
             if r["kind"] == "leaf":
                 result[rc][month] = months[rc][month]
                 continue
+            if rc not in affected:
+                result[rc][month] = baseline[rc][month]
+                continue
             ast = parse_formula(r["monthly"])
             f_new = _eval(
                 ast,
-                lambda col, row, month=month: result.get(num_to_code.get(row), {}).get(month, 0),
+                lambda col, row, month=month: result.get(num_to_code.get(row), {}).get(month, Decimal(0)),
                 lambda c1, r1, c2, r2, month=month: _range_values(result, num_to_code, c1, r1, c2, r2, month),
+                external_fn,
             )
-            value = f_new + residual[rc][month]
-            if r["unit"] == "MONEY":
-                value = int(Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+            value = _as_stored(r["unit"], f_new)
+            if not overrides:
+                _assert_equal_stored(r["unit"], value, baseline[rc][month], rc, month)
             result[rc][month] = value
 
     # Annual pass.
     for rc in topo:
         r = rows[rc]
-        if r["kind"] == "leaf" and r["aggregation"] not in ("SUM", "AVERAGE"):
-            result[rc]["YEAR"] = values.get(rc, {}).get("YEAR", 0)
+        if rc not in affected and "YEAR" in values.get(rc, {}):
+            result[rc]["YEAR"] = _to_decimal(values[rc]["YEAR"])
             continue
-        if r["aggregation"] in ("SUM", "AVERAGE"):
+        if annual_formula_overrides_rollup(r):
+            ast = parse_formula(r["annual"])
+            result[rc]["YEAR"] = _as_stored(r["unit"], _eval(
+                ast,
+                lambda col, row: _annual_cell(rows, num_to_code, result, col, row),
+                lambda c1, r1, c2, r2: _annual_range(rows, num_to_code, result, c1, r1, c2, r2),
+                external_fn,
+            ))
+        elif r["kind"] == "leaf" and r["aggregation"] not in ("SUM", "AVERAGE"):
+            result[rc]["YEAR"] = _to_decimal(values.get(rc, {}).get("YEAR", 0))
+            continue
+        elif r["aggregation"] in ("SUM", "AVERAGE"):
             vals = [result[rc][m] for m in MONTHS]
             if r["aggregation"] == "AVERAGE":
-                result[rc]["YEAR"] = sum(vals) / len(vals) if vals else 0
+                result[rc]["YEAR"] = sum((_to_decimal(v) for v in vals), Decimal(0)) / Decimal(len(vals)) if vals else Decimal(0)
             else:
-                result[rc]["YEAR"] = int(round(sum(vals)))
-        else:  # RATIO / DERIVED -> re-evaluate annual formula (J-cells) + residual
+                result[rc]["YEAR"] = _as_stored(r["unit"], sum((_to_decimal(v) for v in vals), Decimal(0)))
+        else:
             ast = parse_formula(r["annual"])
-            result[rc]["YEAR"] = _eval(
+            result[rc]["YEAR"] = _as_stored(r["unit"], _eval(
                 ast,
-                lambda col, row: result[num_to_code[row]]["YEAR"] if row in num_to_code else 0,
+                lambda col, row: _annual_cell(rows, num_to_code, result, col, row),
                 lambda c1, r1, c2, r2: _annual_range(rows, num_to_code, result, c1, r1, c2, r2),
-            ) + annual_residual[rc]
+                external_fn,
+            ))
+        if not overrides and "YEAR" in values.get(rc, {}):
+            _assert_equal_stored(r["unit"], result[rc]["YEAR"], values[rc]["YEAR"], rc, "YEAR")
 
     return result
 
@@ -467,11 +670,45 @@ def _range_values(values, num_to_code, c1, r1, c2, r2, month):
     return [values.get(rc, {}).get(m, 0) for m in MONTHS] if rc else []
 
 
+def _annual_cell(rows, num_to_code, result, col, row):
+    rc = num_to_code.get(row)
+    if not rc:
+        raise ValueError(f"公式年度引用缺少行映射：{col}{row}")
+    if col in {ANNUAL_COL, ZZ_ANNUAL_COL}:
+        if "YEAR" not in result.get(rc, {}):
+            raise ValueError(f"公式年度引用缺少年度数据：{col}{row}")
+        return result[rc]["YEAR"]
+    if col in MONTH_COLS or col in ZZ_MONTH_COLS:
+        month_cols = ZZ_MONTH_COLS if col == ZZ_MONTH_COLS[0] else MONTH_COLS
+        if col not in month_cols:
+            raise ValueError(f"公式年度引用列无法判定期间：{col}{row}")
+        month = MONTHS[month_cols.index(col)]
+        if month not in result.get(rc, {}):
+            raise ValueError(f"公式年度引用缺少月度数据：{col}{row}")
+        return result[rc][month]
+    if "YEAR" not in result.get(rc, {}):
+        raise ValueError(f"公式年度引用缺少年度数据：{col}{row}")
+    return result[rc]["YEAR"]
+
+
 def _annual_range(rows, num_to_code, result, c1, r1, c2, r2):
     if r1 == r2:  # horizontal: one row across months
         rc = num_to_code.get(r1)
-        return [result.get(rc, {}).get(m, 0) for m in MONTHS] if rc else []
-    return [result.get(num_to_code.get(r), {}).get("YEAR", 0) for r in range(r1, r2 + 1) if r in num_to_code]
+        if not rc:
+            raise ValueError(f"公式年度引用缺少行映射：{c1}{r1}:{c2}{r2}")
+        month_cols = ZZ_MONTH_COLS if c1 == ZZ_MONTH_COLS[0] and c2 == ZZ_MONTH_COLS[-1] else MONTH_COLS
+        start = month_cols.index(c1) if c1 in month_cols else 0
+        end = month_cols.index(c2) if c2 in month_cols else len(month_cols) - 1
+        return [result[rc][MONTHS[index]] for index in range(start, end + 1)]
+    values = []
+    for row in range(r1, r2 + 1):
+        rc = num_to_code.get(row)
+        if not rc:
+            raise ValueError(f"公式年度引用缺少行映射：{c1}{row}")
+        if "YEAR" not in result.get(rc, {}):
+            raise ValueError(f"公式年度引用缺少年度数据：{c1}{row}")
+        values.append(result[rc]["YEAR"])
+    return values
 
 
 def display_value(unit, value):

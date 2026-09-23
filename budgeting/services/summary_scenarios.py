@@ -15,13 +15,20 @@ from budgeting.models import (
     REPORTS,
     UploadVersion,
 )
-from budgeting.services.pnl_graph import CROSS_REF, _eval, build_report_graph, parse_formula
+from budgeting.services.pnl_graph import (
+    CROSS_REF,
+    _eval,
+    annual_formula_overrides_rollup,
+    build_report_graph,
+    parse_formula,
+)
 from budgeting.services.budget_versions import (
     REPORTABLE_UPLOAD_STATUSES,
     project_open_cycle,
     selected_project_upload,
 )
 from budgeting.services.scenarios import ScenarioError
+from budgeting.services.template_paths import resolve_template_path
 
 
 RULE_VERSION = "SUMMARY_ANNUAL_V1"
@@ -52,9 +59,7 @@ def _manifest(upload):
     template = upload.template
     if not template or not template.manifest_path:
         raise ScenarioError("该上传版本没有模板清单，不能验证汇总表公式")
-    path = Path(template.manifest_path)
-    if not path.is_absolute():
-        path = Path(settings.BASE_DIR) / path
+    path = resolve_template_path(template.manifest_path)
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -74,6 +79,18 @@ def _rule_formula(dependencies):
         else:
             expression.append((" + " if sign > 0 else " - ") + code)
     return "".join(expression)
+
+
+def _template_formula(metadata):
+    annual = metadata.get("annual") or ""
+    if annual and annual_formula_overrides_rollup(metadata) and not CROSS_REF.search(annual):
+        return annual
+    formula = metadata.get("monthly") or annual
+    if formula and not CROSS_REF.search(formula):
+        return formula
+    if metadata.get("aggregation") in {"RATIO", "DERIVED"} and annual and not CROSS_REF.search(annual):
+        return annual
+    return ""
 
 
 def _annual_values(upload, report_code):
@@ -156,16 +173,12 @@ def _report_definition(upload, report_code):
         graph, number_to_code = build_report_graph(manifest, report_code)
     except ValueError as exc:
         raise ScenarioError(str(exc)) from exc
-    rules = {} if manifest.get("legacy_rehearsal") else _rules(report_code)
-    rule_targets = {f"R{number:04d}": deps for number, deps in rules.items()}
-    derived = {
-        code
-        for code, metadata in graph.items()
-        if metadata["kind"] == "derived"
-        and metadata["aggregation"] in {"RATIO", "DERIVED"}
-        and metadata.get("annual")
-        and not CROSS_REF.search(metadata["annual"])
+    formula_targets = {code for code, metadata in graph.items() if metadata["kind"] == "derived" and _template_formula(metadata)}
+    rules = {} if manifest.get("legacy_rehearsal") else {
+        number: deps for number, deps in _rules(report_code).items() if f"R{number:04d}" not in formula_targets
     }
+    rule_targets = {f"R{number:04d}": deps for number, deps in rules.items()}
+    derived = formula_targets
     return graph, number_to_code, rule_targets, derived
 
 
@@ -252,6 +265,8 @@ def create_summary_scenario(upload, name, actor, report_code, reason=""):
         rule_version=RULE_VERSION,
         inputs={
             "kind": "summary_annual",
+            "informational_only": True,
+            "requirements_source": "annual_targets",
             "report_code": report_code,
             "reason": str(reason or "").strip(),
             "source_identity": _source_identity(upload),
@@ -323,7 +338,10 @@ def _calculate(upload, report_code, overrides):
                         raise ScenarioError(
                             f"年度公式来源缺失：{report_code}:{dependency}；不能按零计算"
                         )
-                ast = parse_formula(metadata["annual"])
+                formula = _template_formula(metadata)
+                if not formula:
+                    raise ScenarioError(f"年度公式来源缺失：{report_code}:{code}；不能按零计算")
+                ast = parse_formula(formula)
 
                 def evaluate(value_map):
                     return Decimal(
@@ -333,7 +351,12 @@ def _calculate(upload, report_code, overrides):
                                 lambda _col, row: value_map[number_to_code[row]]
                                 if row in number_to_code and number_to_code[row] in value_map
                                 else (_raise_missing(report_code, row)),
-                                lambda _c1, _r1, _c2, _r2: (_raise_range(report_code, code)),
+                                lambda _c1, r1, _c2, r2: [
+                                    value_map[number_to_code[row]]
+                                    if row in number_to_code and number_to_code[row] in value_map
+                                    else (_raise_missing(report_code, row))
+                                    for row in range(r1, r2 + 1)
+                                ],
                             )
                         )
                     )
@@ -376,7 +399,7 @@ def _calculate(upload, report_code, overrides):
             formula = _rule_formula(rule_targets[code])
             formula_kind = "RECONCILIATION"
         elif code in derived:
-            formula = metadata.get("annual") or ""
+            formula = _template_formula(metadata)
             formula_kind = "DERIVED"
         row = {
             "code": code,
@@ -507,6 +530,8 @@ def issue_summary_scenario(scenario, actor):
         reason=reason,
         cascade={
             "kind": "summary_annual",
+            "informational_only": True,
+            "requirements_source": "annual_targets",
             "scenario_id": str(scenario.pk),
             "rule_version": RULE_VERSION,
             "source_identity": _source_identity(upload),

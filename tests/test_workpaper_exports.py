@@ -212,7 +212,7 @@ class WorkpaperExportTests(TestCase):
             )
         self.assertEqual(response.status_code, 200)
         body = response.content.decode("utf-8")
-        self.assertIn("重算 XLSX（不可用）", body)
+        self.assertIn("计算后报表（不可用）", body)
         self.assertIn("当前批准版本 ZIP 不可用", body)
         digest.assert_not_called()
 

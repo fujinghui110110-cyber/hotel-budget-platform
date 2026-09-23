@@ -45,7 +45,7 @@
           {% for row in rows %}
             {% with upload=row.latest current=row.current %}
               <tr>
-                <th scope="row">{{ row.project.code }} {{ row.project.name }}</th>
+                <th scope="row">{{ row.project.code }} {{ row.project.name }} {% include 'budgeting/includes/annual_targets_link.html' with target_project=row.project %}</th>
                 <td>{% if current %}{{ current.original_name|default:current.pk }}{% else %}<span class="muted">—</span>{% endif %}</td>
                 <td>{% if upload %}{{ upload.original_name|default:upload.pk }}<small class="muted">{{ upload.created_at|date:"m-d" }}</small>{% else %}<span class="muted">尚未上传</span>{% endif %}</td>
                 <td>{% if upload %}<span class="status-badge status-badge--{{ upload.status|lower }}">{{ upload.get_status_display }}</span>{% else %}<span class="status-badge">待上传</span>{% endif %}</td>

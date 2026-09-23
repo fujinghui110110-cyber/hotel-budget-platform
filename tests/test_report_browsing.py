@@ -79,7 +79,7 @@ class ReportBrowsingTests(TestCase):
         self.assertEqual(len(page.context["contributions"]), 1)
         self.assertEqual(page.context["contributions"][0]["project"], project.code)
         report_url = reverse("management_report", args=["A21前台"])
-        self.assertContains(page, f'href="{report_url}?project_id={project.pk}"', count=2)
+        self.assertContains(page, f'href="{report_url}?cycle={page.context["cycle"].pk}&amp;project_id={project.pk}"', count=2)
 
     @patch("budgeting.views.sub_table_reports")
     def test_catalog_exposes_all_registered_sheets_even_without_values(self, tables):

@@ -7,14 +7,14 @@
 先停止后台 Web 和 worker，避免复制过程中 SQLite 或上传文件继续变化：
 
 ```sh
-cd "/Users/frank/Documents/ChatGPT/预算系统"
-./停止预算统筹系统.command
+cd "/path/to/预算系统"
+./scripts/maintenance/停止预算统筹系统.command
 ```
 
 确认服务已停止：
 
 ```sh
-./启动预算统筹系统.command status || true
+.venv/bin/python scripts/local_server.py status || true
 ```
 
 `status` 显示未就绪并不等于某个其他服务已经停止；如果 `8768` 被其他程序占用，应先查明占用者。
@@ -102,7 +102,7 @@ PORT=8770 .venv/bin/python scripts/local_server.py stop
 3. 将已核对的恢复副本复制到正式 `DATABASE_PATH` 和 `BUDGET_STORAGE_ROOT`；
 4. 以正式根 `.env.production` 导出环境变量，运行 `manage.py check`；
 5. 用脱敏文件验证登录、项目隔离、底稿导出和 worker 终态；
-6. 确认无误后再运行 `./启动预算统筹系统.command`。
+6. 确认无误后再运行 `./一键启动.command`。
 
 保留旧目录和所有恢复证据，审计记录中写明恢复依据、备份哈希、操作者和时间。不要用 `rm` 删除旧数据，也不要把本地复制流程当作生产灾备。
 

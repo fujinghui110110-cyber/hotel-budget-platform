@@ -35,3 +35,11 @@ offline/
 
 # Local administrator credentials must never be published.
 本机账号信息/
+
+# Browser acceptance artifacts may contain project financial data.
+.playwright-cli/
+output/playwright/
+
+# Local test caches.
+.pytest_cache/
+.ruff_cache/

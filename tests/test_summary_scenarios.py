@@ -17,6 +17,7 @@ from budgeting.models import (
     UploadVersion,
 )
 from budgeting.services.summary_scenarios import (
+    _template_formula,
     build_summary_editor,
     calculate_summary_scenario,
     create_summary_scenario,
@@ -167,6 +168,23 @@ class SummaryScenarioTests(TestCase):
         self.assertEqual([item["value_int"] for item in room_revenue["history"]], [700_000, 760_000, 800_000])
         missing_history = next(row for row in build_summary_editor(self.upload, "PL_TOTAL_WINE") if row["code"] == "R0042")
         self.assertEqual([item["value_int"] for item in missing_history["history"]], [None, None, None])
+
+    def test_template_formula_prefers_non_simple_annual_bridge_only(self):
+        bridge = {
+            "monthly": "F113",
+            "annual": "ROUND(S113+S121-SUM(S115:S120,S122)+S123,2)",
+            "aggregation": "SUM",
+            "row_num": 124,
+        }
+        simple = {
+            "monthly": "F105*0.04",
+            "annual": "ROUND(SUM(ROUND(F105,2),ROUND(G105,2),ROUND(H105,2),ROUND(I105,2),ROUND(J105,2),ROUND(K105,2),ROUND(L105,2),ROUND(M105,2),ROUND(N105,2),ROUND(O105,2),ROUND(P105,2),ROUND(Q105,2)),2)",
+            "aggregation": "SUM",
+            "row_num": 105,
+        }
+
+        self.assertEqual(_template_formula(bridge), bridge["annual"])
+        self.assertEqual(_template_formula(simple), simple["monthly"])
 
     def test_annual_leaf_edit_recalculates_rules_and_issues_visible_targets(self):
         original_month_count = NormalizedValue.objects.filter(upload=self.upload, month__isnull=False).count()

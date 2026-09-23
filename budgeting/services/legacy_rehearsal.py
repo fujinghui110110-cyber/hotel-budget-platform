@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
 from django.conf import settings
+from budgeting.services.template_paths import resolve_template_path
 from django.db import transaction
 
 from budgeting.excel.extract import sheet_slug
@@ -20,7 +21,12 @@ def _key(value):
 
 def _number(cell):
     value = cell.get('cached_value') if cell else None
-    if value is None or isinstance(value, bool) or cell.get('error_status'):
+    if (
+        value is None
+        or isinstance(value, bool)
+        or cell.get('error_status')
+        or cell.get('is_error')
+    ):
         return None
     try:
         number = Decimal(str(value))
@@ -37,10 +43,50 @@ def _unit(label, cell):
     return 'MONEY'
 
 
-def _value(upload, code, row_code, label, period, year, kind, cell, unit):
+def _is_blank_input(cell):
+    """Return whether a source cell is an ordinary, non-formula blank."""
+    if (
+        not cell
+        or cell.get('is_formula')
+        or cell.get('formula')
+        or cell.get('error_status')
+        or cell.get('is_error')
+    ):
+        return False
+    raw = cell.get('cached_value')
+    return raw is None or (isinstance(raw, str) and not raw.strip())
+
+
+def _column_name(column):
+    letters = ''
+    while column:
+        column, remainder = divmod(column - 1, 26)
+        letters = chr(65 + remainder) + letters
+    return letters
+
+
+def _blank_cell(row, column, sheet):
+    """Make a sparse blank cell while retaining its workbook coordinate."""
+    return {
+        'row': row,
+        'column': column,
+        'coordinate': f'{_column_name(column)}{row}',
+        'cached_value': None,
+        'display_value': None,
+        'formula': None,
+        'is_formula': False,
+        'error_status': None,
+        'is_error': False,
+        '_sheet': sheet,
+    }
+
+
+def _value(upload, code, row_code, label, period, year, kind, cell, unit, *, blank_as_zero=False):
     number = _number(cell)
     if number is None:
-        return None
+        if not blank_as_zero or not _is_blank_input(cell):
+            return None
+        number = Decimal(0)
     base = dict(upload=upload, report_code=code, row_code=row_code, row_label=label[:240], period=period,
                 data_year=year, data_kind=kind, month=int(period) if re.fullmatch(r'\d{2}', period) else None,
                 source_sheet=cell['_sheet'], source_cell=cell['coordinate'], source_formula=cell.get('formula') or '', unit=unit)
@@ -111,7 +157,7 @@ def process_legacy_rehearsal(upload, source_path, run):
         upload.status = UploadVersion.Status.REJECTED
         upload.save(update_fields=['status'])
         return False
-    template_path = Path(upload.cycle.template.manifest_path)
+    template_path = resolve_template_path(upload.cycle.template.manifest_path)
     if not template_path.is_absolute():
         template_path = Path(settings.BASE_DIR) / template_path
     canonical_manifest = json.loads(template_path.read_text())
@@ -173,15 +219,19 @@ def process_legacy_rehearsal(upload, source_path, run):
             actual_label = meta['row_label'] if meta else label
             for col, (period, year, kind) in columns.items():
                 cell = by_row[r].get(col)
+                budget_blank = bool(meta and kind == 'BUDGET' and year == upload.cycle.budget_year)
+                if cell is None and budget_blank:
+                    cell = _blank_cell(r, col, name)
                 if not cell:
                     continue
                 unit = meta['unit'] if meta else _unit(label, cell)
-                if cell.get('error_status'):
+                if cell.get('error_status') or cell.get('is_error'):
                     error_count += 1
                     continue
-                if cell.get('is_formula') and _number(cell) is None:
+                if (cell.get('is_formula') or cell.get('formula')) and _number(cell) is None:
                     missing_formula_count += 1
-                value = _value(upload, code, row_code, actual_label, period, year, kind, cell, unit)
+                value = _value(upload, code, row_code, actual_label, period, year, kind, cell, unit,
+                               blank_as_zero=budget_blank)
                 if value is not None:
                     values.append(value)
                     if kind == 'BUDGET' and year == upload.cycle.budget_year:
@@ -200,11 +250,13 @@ def process_legacy_rehearsal(upload, source_path, run):
         issue('LEGACY_NON_GRID_SHEETS', '以下工作表未识别完整12个月表头，完整内容保留在原件导出：'+'、'.join(skipped))
     issue('LEGACY_CACHED_VALUES', f'演练数据：读取{source_year}年原表已保存的数值；按+{offset}年映射。未重算、未执行宏、未刷新外链，不代表真实{upload.cycle.budget_year}年预算。')
     if error_count or missing_formula_count:
-        issue('LEGACY_SOURCE_CACHE_GAPS', f'识别范围内原表有{error_count}个错误值、{missing_formula_count}个无数值的公式；相关值保持缺失，未按零处理。')
+        issue('LEGACY_SOURCE_CACHE_GAPS', f'识别范围内原表有{error_count}个错误值、{missing_formula_count}个无数值的公式；相关错误或公式值保持缺失，未按零处理。')
     if not any(v.report_code in REPORTS and v.period == 'YEAR' for v in values):
         issue('LEGACY_NO_SUMMARY', '未识别到可用年度损益汇总表，不能形成预算报表。', 'P0')
     NormalizedValue.objects.filter(upload=upload).delete()
     NormalizedValue.objects.bulk_create(values, batch_size=500)
+    from budgeting.excel.supplementary import extract_supplementary_values
+    extract_supplementary_values(upload, source_path, validation_run=run)
     path = source_path.parent / 'legacy_manifest.json'
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
     template, _ = TemplateVersion.objects.update_or_create(version=f'LEGACY-{upload.pk}', defaults={

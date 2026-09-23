@@ -24,9 +24,9 @@
   </div>
   <form method="post" action="{% url 'management_budget_version_open' %}" class="filter-bar">
     {% csrf_token %}
-    <label class="compact-field">预算年度<input type="number" name="budget_year" min="2000" max="2200" required placeholder="例如 2027"></label>
-    <label class="compact-field">版本名称（可选）<input type="text" name="name" maxlength="120" placeholder="例如 2027 年度预算"></label>
-          <label class="compact-field">演练原表年度（正式填报留空）<input type="number" name="source_budget_year" min="2000" max="2199" placeholder="例如 2026"></label>
+    <label class="compact-field">预算年度<input type="number" name="budget_year" min="2000" max="2200" required placeholder="输入预算年度"></label>
+    <label class="compact-field">版本名称（可选）<input type="text" name="name" maxlength="120" placeholder="输入便于识别的版本名称"></label>
+          <label class="compact-field">演练原表年度（正式填报留空）<input type="number" name="source_budget_year" min="2000" max="2199" placeholder="输入原表所属年度"></label>
       <button class="button button--primary" type="submit" data-confirm="开放后项目即可上传该版本，确认继续？">开放版本</button>
   </form>
   <p class="table-footnote"><span aria-hidden="true">i</span>系统自动生成当年下一个 R 版本；开放新版本时会停止当年旧版本上传，历史数据仍保留。</p>

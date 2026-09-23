@@ -1,4 +1,5 @@
 from __future__ import annotations
+from budgeting.services.project_scope import cycle_projects
 
 import csv
 import io
@@ -13,6 +14,7 @@ from django.db.models import OuterRef, Q, Subquery
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from budgeting.services.validation_reads import current_validation_issues
 
 from budgeting.models import (
     AdjustmentLine,
@@ -310,7 +312,7 @@ def management_dashboard(request):
             cells.append(_display_value(bucket.get("value"), kpi["unit"], "yuan", kpi["code"], METRICS[kpi["code"]].get("aggregation")))
         projects.append({"project": pc.project, "cells": cells})
     trend = build_trend(cycle, "revenue_total", report_code, data_scope="latest") if cycle else {}
-    project_cycles = ProjectCycle.objects.filter(cycle=cycle, project__is_active=True)
+    project_cycles = ProjectCycle.objects.filter(cycle=cycle, project_id__in=cycle_projects(cycle).values("pk"))
     latest_ids = project_cycles.annotate(latest_id=Subquery(
         UploadVersion.objects.filter(cycle=cycle, project_id=OuterRef("project_id"))
         .order_by("-created_at", "-pk").values("pk")[:1]
@@ -320,7 +322,7 @@ def management_dashboard(request):
     )
     management_tasks = {
         "submitted_projects": UploadVersion.objects.filter(pk__in=latest_ids, status="SUBMITTED").count(),
-        "validation_projects": ValidationIssue.objects.filter(
+        "validation_projects": current_validation_issues().filter(
             Q(severity="P0") | Q(severity="P1", acknowledged=False),
             run__upload_id__in=latest_ids,
         ).values("run__upload__project_id").distinct().count(),

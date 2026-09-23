@@ -1,11 +1,17 @@
+from budgeting.services.project_scope import cycle_projects
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urlencode
 
 from django.conf import settings
+from django.contrib import messages
+from django.core.exceptions import ValidationError
+from budgeting.services.template_library import get_distribution_template, distribution_template_path, publish_template
+from budgeting.services.template_paths import resolve_template_path
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.views.decorators.http import require_http_methods
 
 from budgeting.cockpit_views import admin_required, _cycle, _report
 from budgeting.models import BudgetCycle, NormalizedValue, Project, REPORTS
@@ -23,19 +29,19 @@ OVERVIEW_METRICS = (
 )
 
 
-def _project_id(request):
+def _project_id(request, cycle):
     raw = request.GET.get("project_id", "")
     if not raw:
         return None
     try:
-        return get_object_or_404(Project, pk=int(raw), is_active=True).pk
+        return get_object_or_404(cycle_projects(cycle), pk=int(raw)).pk
     except ValueError as exc:
         raise Http404("项目不存在") from exc
 
 
 def _context(request):
     cycle = _cycle(request)
-    project_id = _project_id(request)
+    project_id = _project_id(request, cycle)
     report = _report(request)
     uploads = latest_report_uploads(cycle, project_id=project_id) if cycle else []
     upload_ids = [item.current_upload_id for item in uploads]
@@ -43,7 +49,7 @@ def _context(request):
     return {
         "cycle": cycle,
         "cycles": BudgetCycle.objects.order_by("-budget_year", "-revision_no"),
-        "projects": Project.objects.filter(is_active=True),
+        "projects": cycle_projects(cycle),
         "selected_project_id": project_id,
         "report_code": report,
         "report_choices": [{"code": code, "label": label} for code, label in REPORTS.items()],
@@ -125,11 +131,25 @@ def planning_projects(request):
 
 
 @admin_required
+@require_http_methods(["GET", "POST"])
 def planning_templates(request):
     context = _context(request)
     cycle = context["cycle"]
+    if request.method == "POST":
+        if not cycle:
+            messages.error(request, "请先选择预算版本。")
+        elif not request.FILES.get("template_file"):
+            messages.error(request, "请选择需要发布的 Excel 模板。")
+        else:
+            try:
+                publish_template(cycle, request.FILES["template_file"], request.user, request.POST.get("template_name", ""))
+                messages.success(request, "填报模板已发布，项目现在可以下载。此前发布的文件仍保留。")
+                return redirect(reverse("planning_templates") + "?" + urlencode({"cycle": cycle.pk}))
+            except ValidationError as exc:
+                messages.error(request, "；".join(exc.messages))
     template = cycle.template if cycle and cycle.template_id else None
-    has_template = bool(template and (Path(settings.BASE_DIR) / template.file_path).is_file())
+    distributed = get_distribution_template(cycle)
+    has_template = bool(distribution_template_path(distributed).is_file()) if distributed else bool(template and resolve_template_path(template.file_path).is_file())
     downloads = []
     if has_template:
         for project in context["projects"]:
@@ -137,20 +157,31 @@ def planning_templates(request):
             downloads.append({"project": project, "url": url})
     context.update({
         "template": template, "has_template": has_template, "downloads": downloads,
-        "source_note": "每个项目下载带项目和预算年度标识的模板。填报后由项目账号上传，系统重算、校验并保留原件。",
+        "distributed": distributed,
+        "template_history": cycle.distributed_templates.order_by("-created_at", "-pk")[:10] if cycle else [],
     })
     return render(request, "budgeting/planning_templates.html", context)
 
 
 @admin_required
 def planning_template_download(request, project_id):
+    from budgeting.services.template_library import download_distribution_template
     cycle = _cycle(request)
-    project = get_object_or_404(Project, pk=project_id, is_active=True)
     if not cycle or not cycle.template_id:
-        raise Http404("此预算年度尚未配置统一模板")
-    path = signed_template_copy(cycle.template, project, cycle)
-    return FileResponse(path.open("rb"), as_attachment=True,
-                        filename=f"{project.name}-{cycle.budget_year}年预算填报模板.xlsx")
+        messages.info(request, "此预算版本尚未发布可用填报模板。")
+        return redirect("planning_templates")
+    project = get_object_or_404(cycle_projects(cycle), pk=project_id)
+    try:
+        distributed = get_distribution_template(cycle)
+        if distributed:
+            path = download_distribution_template(distributed, project, cycle)
+        else:
+            path = signed_template_copy(cycle.template, project, cycle)
+        return FileResponse(path.open("rb"), as_attachment=True,
+                            filename=f"{project.name}-{cycle.budget_year}年预算-R{cycle.revision_no}{path.suffix}")
+    except (FileNotFoundError, ValueError, ValidationError):
+        messages.error(request, "模板暂时无法下载，请检查已发布文件和历史数据。")
+        return redirect(reverse("planning_templates") + "?" + urlencode({"cycle": cycle.pk}))
 
 
 @admin_required

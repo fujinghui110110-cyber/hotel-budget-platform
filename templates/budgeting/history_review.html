@@ -7,13 +7,20 @@
 {% if batch.proposal.issues %}<section class="panel" style="padding:24px;margin:20px 0"><h2>读取提醒</h2><ul>{% for issue in batch.proposal.issues %}<li>{% if issue.source_label %}<strong>{{ issue.source_label }}</strong>：{% endif %}{{ issue.message|default:issue }}{% if issue.location %}（{{ issue.location }}）{% endif %}</li>{% endfor %}</ul><p>空值或公式未保存计算结果均保留为缺失，不会按零补齐。</p></section>{% endif %}
 <section class="panel" style="padding:24px">
 {% if batch.confirmed_at %}
-<h2>{% if batch.active %}已确认生效{% else %}已被新文件替换{% endif %}</h2><p>确认时间：{{ batch.confirmed_at }}。修改历史数据请重新上传并确认。</p>
+<h2>{% if batch.active %}已确认生效{% else %}已被新文件替换{% endif %}</h2><p>确认时间：{{ batch.confirmed_at }}。{% if batch.proposal.history_baseline_id %}锁定基准编号：{{ batch.proposal.history_baseline_id }}。确认理由：{{ batch.proposal.confirmation_reason }}。{% else %}此旧导入尚无可证实的锁定历史基准，请在下一次管理员确认时明确复核纳入。{% endif %}修改历史数据请重新上传并确认新版本。</p>
 <div class="table-scroll"><table><thead><tr><th>系统科目</th><th>期间</th><th>数值</th><th>来源</th></tr></thead><tbody>
 {% for value in values %}<tr><td>{{ value.row_label }}</td><td>{% if value.month %}{{ value.month }}月{% else %}全年{% endif %}</td><td>{{ value.display }}</td><td>{{ value.source_sheet }}!{{ value.source_cell }}</td></tr>{% endfor %}
 </tbody></table></div>
 {% else %}
-<h2>原科目与系统科目</h2><p>高置信度匹配已预选。低置信度、重名科目请改选或保留“不导入”；同一系统科目只能选择一次。确认会完整替换本项目所选年度、口径的历史报表。</p>
-<form method="post">{% csrf_token %}<div class="table-scroll"><table><thead><tr><th>原科目</th><th>匹配建议</th><th>系统科目</th><th>读取情况</th></tr></thead><tbody>
+<h2>原科目与系统科目</h2><p>系统已推荐相近科目，请逐项核对。无法确认的科目可选择“不导入”；同一系统科目只能选择一次。确认后保存为新的历史数据版本，保留其他已确认科目、年度及已批准预算。</p>
+<form method="post">{% csrf_token %}
+<input type="hidden" name="expected_revision" value="{{ expected_revision }}">
+<div class="panel"><h3>历史版本与影响范围</h3><p>当前锁定历史版本：{% if previous %}第 {{ previous.revision }} 版{% else %}尚无已确认版本，已有导入记录仍需复核{% endif %}。确认后，相关未批准预算、测算和评价需要重新检查。</p>
+<label>用于对比的预算年度<select name="plan" required><option value="">请选择预算年度</option>{% for plan in plans %}<option value="{{ plan.pk }}">{{ plan.budget_year }} 年预算</option>{% endfor %}</select></label>
+{% for affected in affected_plans %}<label><input type="checkbox" name="affected_plan_ids" value="{{ affected.pk }}" required> 确认同时修订 {{ affected.budget_year }} 年预算引用的历史基准</label>{% endfor %}
+{% if legacy %}<details><summary>其他已导入历史文件（仅经本次明确复核后才纳入锁定）</summary><ul>{% for old in legacy %}<input type="hidden" name="legacy_import_ids" value="{{ old.pk }}"><li>{{ old.data_year }} {{ old.get_data_kind_display }} · {{ old.get_report_code_display }} · {{ old.original_name }}</li>{% endfor %}</ul><label><input type="checkbox" name="include_legacy" value="yes"> 我已复核上述文件，确认将其尚未锁定的数据一并纳入；已有锁定值不被旧文件覆盖。</label></details>{% endif %}
+<label>确认 / 修订理由<textarea name="reason" required placeholder="说明本次核对依据、调整原因及影响"></textarea></label><label><input type="checkbox" name="confirm_impact" value="yes" required> 已核对科目对应关系、历史数据范围及影响年度，确认保存新版本并保留修订记录。</label></div>
+<div class="table-scroll"><table><thead><tr><th>原科目</th><th>匹配建议</th><th>系统科目</th><th>读取情况</th></tr></thead><tbody>
 {% for row in rows %}<tr><td>{{ row.source_label }}<small style="display:block;color:#667085">{{ row.source_key }}</small></td><td>{% for candidate in row.candidates|slice:":3" %}{{ candidate.row_label }}（{{ candidate.score|floatformat:2 }}）<br>{% endfor %}</td><td><select name="{{ row.field }}" aria-label="{{ row.source_label }}映射"><option value="">不导入</option>{% for item in canonical %}<option value="{{ item.row_code }}"{% if row.selected == item.row_code %} selected{% endif %}>{{ item.row_label }} · {{ item.row_code }}</option>{% endfor %}</select></td><td>{{ row.value_count }} 个数值<details><summary>查看读取值</summary>{% for value in row.preview %}<div>{% if value.month %}{{ value.month }}月{% else %}全年{% endif %}：{{ value.display }} · {{ value.source_cell }}</div>{% endfor %}</details></td></tr>{% endfor %}
 </tbody></table></div><button class="button button--primary" style="margin-top:20px">确认匹配并导入历史数据</button></form>
 {% endif %}

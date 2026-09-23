@@ -6,7 +6,7 @@
     <div>
       <p class="eyebrow">组织架构</p>
       <h1>组织与账号</h1>
-      <p class="lede">维护项目与账号：一个项目绑定一个项目端账号，账号密码由管理员统一维护。</p>
+      <p class="lede">维护项目与账号：每个项目对应一个项目账号，账号密码由管理员统一维护。</p>
     </div>
   </section>
 
@@ -37,7 +37,7 @@
       <div class="table-scroll">
         <table>
           <caption class="sr-only">项目账号清单</caption>
-          <thead><tr><th scope="col">账号</th><th scope="col">绑定项目</th></tr></thead>
+          <thead><tr><th scope="col">账号</th><th scope="col">所属项目</th></tr></thead>
           <tbody>
             {% for account in accounts %}
               <tr><th scope="row" class="mono">{{ account.username }}</th><td>{{ account.project.code }} {{ account.project.name }}</td></tr>

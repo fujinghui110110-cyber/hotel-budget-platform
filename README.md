@@ -1,5 +1,13 @@
 # 酒店预算统筹管理系统
 
+## 日常使用只需双击一个文件
+
+- **Mac：`一键启动.command`**
+- **Windows：`一键启动-Windows.bat`**
+
+服务准备好后会自动打开系统网页，默认地址 `http://127.0.0.1:8768/`。再次双击会打开已运行的系统。Windows首次使用也用这个入口。停止、管理员修复及登录自启工具收纳在 `scripts/maintenance/`；公网访问在登录后的管理页面操作。
+
+
 这是一个面向酒店管理公司财务管理端的预算统筹系统。管理端维护预算周期、统一 Excel 模板、项目版本、汇总报表、预算测算、审核问答和冻结快照；项目端用自己的项目账号下载模板、填报、上传并查看校验结果。
 
 系统按预算年度 `T` 组织数据。为编制下一年度预算，默认同时保留两年前和三年前的实际、上一年度的预测以及 `T` 年预算：
@@ -17,7 +25,7 @@
 
 Windows 与 Mac 的本机入口统一为 **http://127.0.0.1:8768/**。在服务器电脑上登录管理员账号，进入 **系统设置 → 公网访问**，点击 **生成公网链接**。系统会重启独立的公网服务，自动显示可复制的新链接；原公网链接失效，本机服务保持可用。项目公司使用公网链接和各自账号登录。
 
-Windows 首次使用请阅读 [Windows 部署与迁移](docs/WINDOWS部署.md)，双击 `安装预算统筹系统-Windows.bat`；以后双击 `启动预算统筹系统-Windows.bat`。代码可以保存在 GitHub，数据库和预算原件保存在服务器电脑。下载代码不会带入现有项目数据，换电脑时须按文档迁移。
+Windows 首次使用请阅读 [Windows 部署与迁移](docs/WINDOWS部署.md)，双击 `一键启动-Windows.bat`；以后双击 `一键启动-Windows.bat`。代码可以保存在 GitHub，数据库和预算原件保存在服务器电脑。下载代码不会带入现有项目数据，换电脑时须按文档迁移。
 
 `127.0.0.1` 始终指当前电脑，不是跨电脑通用的服务器地址。无需域名的公网链接是临时地址；服务器需保持开机、联网且不休眠。
 
@@ -28,9 +36,9 @@ Mac 本机服务只监听 `127.0.0.1:8768`，数据保存在本机。需要外�
 在终端执行：
 
 ```sh
-cd "/Users/frank/Documents/ChatGPT/预算系统"
+cd "/path/to/预算系统"
 sh scripts/setup_mac.sh
-./启动预算统筹系统.command
+./一键启动.command
 ```
 
 `setup_mac.sh` 会建立 `.venv` 并安装 `requirements.txt`。启动器随后由 `scripts/local_server.py` 执行迁移、Django 检查、静态文件收集，并在后台启动 Gunicorn 和 `budget_worker`；可以关闭启动终端。浏览器地址为：
@@ -42,9 +50,9 @@ http://127.0.0.1:8768/
 状态与停止：
 
 ```sh
-./启动预算统筹系统.command status
+.venv/bin/python scripts/local_server.py status
 curl -fsS http://127.0.0.1:8768/healthz
-./停止预算统筹系统.command
+./scripts/maintenance/停止预算统筹系统.command
 ```
 
 日志在 `logs/server.log`、`logs/web.log` 和 `logs/worker.log`，运行状态在 `.runtime/server.json`。启动器不会初始化演示账号、重置密码或删除已有数据。直接运行 `manage.py` 不会自动读取 `.env`；首次空数据库前，请只对自己创建且可信的配置文件执行导出：
@@ -127,6 +135,6 @@ Docker 与 Caddy 文件保留在 `compose.yaml`、`Dockerfile` 和 `deploy/` 中
 
 ### Windows 离线安装包
 
-Windows x64 首次安装可直接解压完整离线包，双击 `安装预算统筹系统-Windows.bat`。系统自动检测 Python 3.13 和 LibreOffice，缺失时使用包内安装器安装；Python 依赖和公网连接程序也已随包提供。LibreOffice 安装可能弹出 Windows 管理员确认。详见 [Windows 部署说明](docs/WINDOWS部署.md)。
+Windows x64 首次安装可直接解压完整离线包，双击 `一键启动-Windows.bat`。系统自动检测 Python 3.13 和 LibreOffice，缺失时使用包内安装器安装；Python 依赖和公网连接程序也已随包提供。LibreOffice 安装可能弹出 Windows 管理员确认。详见 [Windows 部署说明](docs/WINDOWS部署.md)。
 
 LibreOffice 用于重新计算上传 Excel 的公式，避免公式缓存为空或过期导致汇总数据缺失；项目人员无需手动打开它。生成公网链接时仍需要联网。
