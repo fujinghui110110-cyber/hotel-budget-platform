@@ -1,38 +1,46 @@
-name: Reviewed draft release
+name: Cross-platform upgrade and reviewed release
 on:
   pull_request:
   push:
-    branches: ["codex/real-project-browser-qa"]
+    branches: ["codex/real-project-browser-qa", "main"]
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
         description: Existing reviewed version tag
-        required: true
-      policy:
-        description: Committed verified release policy path
         required: true
 permissions:
   contents: read
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      DATABASE_PATH: ${{ runner.temp }}/budget upgrade test/db.sqlite3
+      BUDGET_STORAGE_ROOT: ${{ runner.temp }}/budget upgrade test/storage
+      BUDGET_RUNTIME_ROOT: ${{ runner.temp }}/budget upgrade test/runtime
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - run: python -m pip install --require-hashes -r requirements-update.lock -r requirements.txt
+      - run: |
+          python -m pip install --require-hashes --only-binary=:all: -r requirements-update.lock -r requirements.txt
       - run: python manage.py test tests --noinput
-        env:
-          DATABASE_PATH: ${{ runner.temp }}/预算 空格/db.sqlite3
-          BUDGET_STORAGE_ROOT: ${{ runner.temp }}/预算 空格/storage
+      - name: Build actual committed modern and legacy packages
+        run: |
+          python -m scripts.build_system_release --output dist/modern/budget-system-update.zip --policy docs/refactor/release-policy.json
+          python -m scripts.build_legacy_bridge --output dist/bridge/budget-system-update.zip
+      - name: Upgrade an existing installation without losing business data
+        run: python -m scripts.verify_online_upgrade --bridge dist/bridge/budget-system-update.zip --modern dist/modern/budget-system-update.zip
   draft:
-    if: github.event_name == 'workflow_dispatch'
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     needs: test
     runs-on: ubuntu-latest
     permissions:
@@ -43,16 +51,60 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - run: python -m scripts.build_system_release --output dist/budget-system-update.zip --policy "$POLICY"
+      - name: Build version-specific package
         env:
-          POLICY: ${{ inputs.policy }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          if [ "$TAG" = "v2026.09.23.0" ]; then
+            python -m scripts.build_legacy_bridge --output dist/budget-system-update.zip
+          else
+            python -m scripts.build_system_release --output dist/budget-system-update.zip --policy docs/refactor/release-policy.json
+          fi
+      - name: Bind tag and manifest
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          python - <<'PYVERIFY'
+          import json, os, pathlib, zipfile
+          with zipfile.ZipFile('dist/budget-system-update.zip') as package:
+              manifest = json.loads(package.read('manifest.json'))
+          assert 'v' + manifest['version'] == os.environ['TAG'], 'Tag and package version differ'
+          pathlib.Path('dist/release-manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+          PYVERIFY
       - uses: actions/attest-build-provenance@v2
         with:
-          subject-path: 'dist/*'
-      - run: gh release create "$TAG" dist/budget-system-update.zip dist/release-manifest.json --draft --verify-tag --title "$TAG" --notes 'Draft only. Publish after native and real workbook acceptance.'
+          subject-path: 'dist/budget-system-update.zip'
+      - name: Create draft only; never replace legacy latest automatically
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          RELEASE_NOTES=docs/RELEASE_2026.09.23.1.md
+          if [ "$TAG" = "v2026.09.23.0" ]; then RELEASE_NOTES=docs/RELEASE_2026.09.23.0.md; fi
+          gh release create "$TAG" dist/budget-system-update.zip dist/release-manifest.json --draft --latest=false --verify-tag --title "$TAG" --notes-file "$RELEASE_NOTES"
+  verify_draft:
+    needs: draft
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      attestations: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+      - name: Download the actual draft asset and verify provenance on each platform
+        run: |
+          gh release download "$TAG" --pattern budget-system-update.zip --dir verified
+          gh attestation verify verified/budget-system-update.zip --repo fujinghui110110-cyber/hotel-budget-platform --signer-workflow fujinghui110110-cyber/hotel-budget-platform/.github/workflows/release.yml --deny-self-hosted-runners --source-digest "$(git rev-parse HEAD)"
+        shell: bash
