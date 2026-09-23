@@ -18,7 +18,7 @@
   <div class="table-scroll"><table class="planning-table planning-projects-table">
     <thead><tr><th>项目</th><th>版本</th><th class="num">总收入</th><th class="num">GOP</th><th class="num">NPI</th><th class="num">出租率</th><th class="num">平均房价</th><th class="num">较预测变化率</th><th>分析</th></tr></thead>
     <tbody>{% for row in project_rows %}<tr>
-      <th scope="row"><a class="planning-project-link" href="{{ row.detail_url }}">{{ row.project.code }} {{ row.project.name }}</a></th>
+      <th scope="row"><a class="planning-project-link" href="{{ row.detail_url }}">{{ row.project.code }} {{ row.project.name }}</a> {% include 'budgeting/includes/annual_targets_link.html' with target_project=row.project %}</th>
       <td class="planning-project-version">{{ row.upload.original_name|default:"—" }}</td><td class="num">{{ row.revenue_display|default:"—" }}</td>
       <td class="num">{{ row.gop_display|default:"—" }}</td><td class="num">{{ row.npi_display|default:"—" }}</td>
       <td class="num">{{ row.occ_display|default:"—" }}</td><td class="num">{{ row.adr_display|default:"—" }}</td>
@@ -28,7 +28,7 @@
 </section>
 <section class="panel">
   <div class="section-heading">
-    <div><h2>项目预算底稿</h2><p>底稿下载按项目和预算周期保留原始、重算文件及版本清单。</p></div>
+    <div><h2>项目预算底稿</h2><p>按项目和预算版本下载上传原件、计算后的报表及文件清单。</p></div>
     <a class="button button--ghost" href="{% url 'management_workpaper_exports' %}{% if cycle %}?cycle={{ cycle.pk }}{% endif %}">进入底稿导出</a>
   </div>
 </section>

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}导入管理指标 · 酒店预算系统{% endblock %}
+
+{% block breadcrumb %}<a href="{% url 'management_metrics' %}">管理指标分析</a><span>导入历年指标</span>{% endblock %}
+
+{% block extra_head %}
+<style>
+  .metric-import { display:grid; gap:20px; max-width:1180px; }
+  .metric-import-panel { background:#fff; border:1px solid #e4e7ec; border-radius:12px; padding:22px; }
+  .metric-import-form { display:grid; grid-template-columns:repeat(4,minmax(150px,1fr)); gap:16px; align-items:end; }
+  .metric-import-form label { display:grid; gap:7px; color:#667085; font-size:13px; }
+  .metric-import-form input, .metric-import-form select { min-height:38px; border:1px solid #d0d5dd; border-radius:7px; padding:7px 10px; background:#fff; box-sizing:border-box; }
+  .metric-import-form .wide { grid-column:1 / -1; }
+  .metric-import-note { padding:14px 16px; border-left:3px solid #98a2b3; background:#f8fafc; color:#475467; line-height:1.8; }
+  .metric-import-warning { padding:14px 16px; border-left:3px solid #d68b35; background:#fff7ed; color:#7c4a03; line-height:1.8; }
+  .metric-import-error { padding:14px 16px; border-left:3px solid #d92d20; background:#fef3f2; color:#912018; line-height:1.8; }
+  .metric-preview-wrap { overflow:auto; max-height:560px; }
+  .metric-preview { border-collapse:separate; border-spacing:0; min-width:720px; width:100%; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .metric-preview th, .metric-preview td { padding:11px 13px; border-bottom:1px solid #edf0f3; text-align:right; }
+  .metric-preview th { position:sticky; top:0; background:#f7f8fa; z-index:1; }
+  .metric-preview th:first-child, .metric-preview td:first-child { text-align:left; }
+  .metric-import-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .metric-import-summary { display:flex; gap:22px; flex-wrap:wrap; color:#475467; }
+  .metric-import-summary strong { color:#1d2939; }
+  @media (max-width:800px) { .metric-import-form { grid-template-columns:1fr 1fr; } }
+  @media (max-width:520px) { .metric-import-form { grid-template-columns:1fr; } .metric-import-form .wide { grid-column:auto; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="metric-import">
+  <section class="page-heading page-heading--split"><div><p class="eyebrow">历史指标</p><h1>导入历年管理指标</h1><p class="page-heading__lead">每次导入都会保留一份历史记录，后续导入不会覆盖此前数据。</p></div><a class="button button--secondary" href="{% url 'management_metrics' %}">返回分析</a></section>
+  {% if error %}<div class="metric-import-error">{{ error }}</div>{% endif %}
+  <div class="metric-import-note">上传前请选择数据类型（实际或预测）、金额单位和四套报表口径。系统会保留原始文件、导入人和修订原因，方便以后核对。底稿中的空白表示缺数，页面显示为“—”。</div>
+  {% if preview %}
+  <section class="metric-import-panel">
+    <div class="section-heading"><div><p class="eyebrow">核对数据</p><h2>确认导入内容</h2></div><span class="section-heading__hint">请核对无误后确认</span></div>
+    <div class="metric-import-summary"><span>文件：<strong>{{ preview.original_name }}</strong></span><span>识别年度：<strong>{% if preview_years %}{{ preview_years|join:'、' }}{% else %}—{% endif %}</strong></span><span>口径：<strong>{% if preview.data_kind == 'ACTUAL' %}实际{% else %}预测{% endif %}</strong></span><span>显示单位：<strong>{{ preview_unit_label }}</strong></span><span>报表：<strong>{{ preview.report_label|default:'—' }}</strong></span><span>项目：<strong>{{ preview_projects|length }}</strong></span><span>数据行：<strong>{{ preview_value_count }}</strong></span></div>
+    <p class="metric-import-note">金额按所选单位显示；ADR、RevPAR始终按元显示，出租率按百分比显示。</p>
+    {% if preview.errors %}<div class="metric-import-error"><strong>请先处理以下问题：</strong><ul>{% for item in preview.errors %}<li>{{ item.message|default:item }}</li>{% endfor %}</ul></div>{% endif %}
+    {% if preview.warnings %}<div class="metric-import-warning"><strong>导入提醒：</strong><ul>{% for item in preview.warnings %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
+    {% if unlinked_projects %}<div class="metric-import-warning"><strong>项目名称未对应：</strong>{{ unlinked_projects|join:'、' }}。系统会保留这些数据，但不会把它们自动并入其他项目，请先核对项目名称。</div>{% endif %}
+    <div class="metric-preview-wrap"><table class="metric-preview"><thead><tr><th>项目</th><th>指标</th><th>年度</th><th>期间</th><th>数值</th><th>来源</th></tr></thead><tbody>{% for row in preview_rows %}<tr><th scope="row">{{ row.project_label }}</th><td>{{ row.metric_label }}</td><td>{{ row.year_label }}</td><td>{{ row.month_label }}</td><td>{{ row.value_display }}</td><td>{{ row.source_sheet|default:'—' }}{% if row.source_cell %}!{{ row.source_cell }}{% endif %}</td></tr>{% empty %}<tr><td colspan="6">没有可预览的数据行。</td></tr>{% endfor %}</tbody></table></div>
+    <form method="post" action="{% url 'management_metric_confirm' %}" class="stack-form" style="margin-top:20px">{% csrf_token %}<input type="hidden" name="token" value="{{ token }}"><input type="hidden" name="expected_latest_id" value="{{ latest_batch_id }}"><label class="field-group">本次导入说明 <textarea name="reason" rows="3" required placeholder="例如：导入2024、2025年度经核对的历史指标">{{ request.POST.reason }}</textarea></label><div class="metric-import-actions"><button class="button button--primary" type="submit"{% if preview.valid is False or preview.errors %} disabled{% endif %}>确认导入</button><a class="button button--ghost" href="{% url 'management_metric_import' %}">重新上传</a></div></form>
+  </section>
+  {% else %}
+  <section class="metric-import-panel"><form method="post" enctype="multipart/form-data" class="metric-import-form">{% csrf_token %}<label>数据口径<select name="data_kind">{% for value, label in data_kind_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label><label>金额单位<select name="money_unit">{% for value, label in money_unit_choices %}<option value="{{ value }}"{% if value == 'WAN' %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label><label>报表口径<select name="report_code">{% for value, label in report_choices %}<option value="{{ value }}"{% if value == default_report_code %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label><label class="wide">管理指标底稿<input type="file" name="file" accept=".xlsx" required></label><p class="metric-import-note wide">支持 .xlsx，最大20MB。系统会从底稿中识别年度。金额按所选单位读取，ADR、RevPAR始终按元读取；同一文件可以包含多个历史年度。</p><div class="metric-import-actions wide"><button class="button button--primary" type="submit">上传并预览</button><a class="button button--ghost" href="{% url 'management_metrics' %}">取消</a></div></form></section>
+  {% endif %}
+</div>
+{% endblock %}

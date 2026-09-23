@@ -28,7 +28,7 @@ class StrictAnnualFormulaTests(TestCase):
         )
 
         expected = {
-            "J23": "ROUND(AVERAGE(L23:W23),0)",
+            "J23": "IF(COUNT(L23:W23)=0,0,ROUND(AVERAGE(L23:W23),0))",
             "J29": "IF(J24=0,0,J28/J24)",
             "J34": "SUM(L34:W34)",
             "J37": "ROUND(IF(J35=0,0,J49/J35),2)",
@@ -46,3 +46,10 @@ class StrictAnnualFormulaTests(TestCase):
             self.assertEqual(formula_node.attrib, {})
             self.assertIsNone(cell.find("m:v", NS))
 
+
+class HeaderLiteralTests(TestCase):
+    def test_view_and_subnm_labels_are_excel_strings(self):
+        from scripts.purify_template import replace_proprietary
+        self.assertEqual(replace_proprietary('VIEW("server","cube","!")'), ('"!"', True, None))
+        self.assertEqual(replace_proprietary('SUBNM("server","dimension","2020一上版")'), ('"2020一上版"', True, None))
+        self.assertEqual(replace_proprietary('SUBNM("server","dimension","cny")'), ('"cny"', True, None))

@@ -53,3 +53,6 @@
   .scenario-monthly-panel,
   .scenario-monthly-panel .cockpit-chart{overflow:hidden}
 }
+
+.sidebar{overflow-y:auto}.sidebar .brand,.sidebar .side-nav,.sidebar__account{flex-shrink:0}
+@media(max-width:760px){.sidebar__account{display:flex;margin-top:16px}}

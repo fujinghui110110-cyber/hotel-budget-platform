@@ -8,6 +8,7 @@
 {% endblock %}
 
 {% block content %}
+{% include 'budgeting/includes/annual_targets_link.html' with target_project=project %}
   {% url 'report_catalog' as report_catalog_url %}
   <link rel="stylesheet" href="{% static 'budgeting/cockpit.css' %}">
 
@@ -15,7 +16,7 @@
     <div>
       <p class="eyebrow">单项目详情</p>
       <h1>{{ project.code }} {{ project.name }}</h1>
-      <p class="lede">{% if project_cycle and project_cycle.current_upload %}当前版本：{{ project_cycle.current_upload.id }} · 已批准{% else %}当前周期没有已批准版本{% endif %}</p>
+      <p class="lede">{% if project_cycle and project_cycle.current_upload %}当前版本：{{ project_cycle.current_upload.id }} · {{ project_cycle.current_upload.get_status_display }}{% else %}当前版本没有可读取的上传{% endif %}</p>
     </div>
     <div class="cockpit-actions">
       <a class="button button--secondary" href="{{ report_catalog_url }}?project_id={{ project.id }}">全部分表</a>
@@ -49,10 +50,10 @@
           </table>
         </div>
       {% else %}
-        <p class="cockpit-empty">暂无该指标的已批准数据。</p>
+        <p class="cockpit-empty">暂无该指标的可读取数据，请查看项目数据审计。</p>
       {% endif %}
     </section>
   {% empty %}
-    <section class="cockpit-panel panel"><p class="cockpit-empty">暂无该项目的已批准数据。</p></section>
+    <section class="cockpit-panel panel"><p class="cockpit-empty">暂无该项目的可读取数据，请查看项目数据审计。</p></section>
   {% endfor %}
 {% endblock %}

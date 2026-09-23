@@ -16,6 +16,7 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment, Font, PatternFill
 
+from budgeting.services.project_scope import cycle_projects
 from budgeting.models import BudgetCycle, NormalizedValue, Project, REPORTS, UploadVersion
 from budgeting.services.budget_versions import REPORTABLE_UPLOAD_STATUSES, selected_project_upload
 from budgeting.services.report_labels import report_row_labels
@@ -37,7 +38,7 @@ class VersionReportArchive:
 
 def usable_uploads(cycle: BudgetCycle, project_ids: Sequence[int] | None = None):
 
-    projects = Project.objects.filter(is_active=True).order_by("code")
+    projects = cycle_projects(cycle)
     if project_ids is not None:
         try:
             ids = [int(value) for value in project_ids]
@@ -246,7 +247,7 @@ def build_project_version_report(upload: UploadVersion, destination: Path | None
         ("校验状态", upload.get_status_display()),
         ("上传时间", _timestamp(upload.created_at)),
         ("报表数量", len(report_list)),
-        ("说明", "本文件为平台抽取报表，不替代原始或重算预算底稿。缺失数据保持为空。"),
+        ("说明", (f"流程演练：{upload.cycle.source_budget_year} 年原表按年度跨度映射为 {upload.cycle.budget_year} 年，不代表该年度真实预算。" if upload.cycle.source_budget_year else "") + "本文件为平台抽取报表，不替代原始或重算预算底稿。缺失数据保持为空。"),
     )
     for row, (label, value) in enumerate(details, start=1):
         _text(cover.cell(row, 1), label)
@@ -281,6 +282,8 @@ def build_cycle_version_report_zip(
             "id": cycle.pk,
             "name": cycle.name,
             "budget_year": cycle.budget_year,
+            "source_budget_year": cycle.source_budget_year,
+            "is_rehearsal": bool(cycle.source_budget_year),
             "revision_no": cycle.revision_no,
             "status": cycle.status,
         },

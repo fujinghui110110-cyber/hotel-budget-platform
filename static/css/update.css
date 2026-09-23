@@ -1,0 +1,5 @@
+.update-panel {padding:28px;margin-bottom:24px}.update-versions{display:flex;gap:64px;margin:24px 0}.update-versions dt{color:var(--text-muted,#667085);font-size:13px;margin-bottom:8px}.update-versions dd{margin:0;font-size:22px;font-weight:650;overflow-wrap:anywhere}.update-panel pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.7;background:#f6f8fa;padding:18px;border-radius:8px}.update-panel label{display:block;margin-bottom:8px}.update-panel .access-link-row{max-width:760px}.update-panel p{line-height:1.7}@media(max-width:600px){.update-versions{flex-direction:column;gap:20px}.update-panel{padding:20px}}
+
+#update-controls button:disabled{cursor:not-allowed}#update-controls[data-busy="true"] button:disabled{cursor:wait}
+
+#update-controls [hidden]{display:none!important}

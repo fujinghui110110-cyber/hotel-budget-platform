@@ -780,9 +780,13 @@ def load_history(upload, wb_values, wb_formulas=None, manifest=None):
     return count
 
 
-def extract_management_values(upload, recalculated_path, validation_run=None):
+def extract_management_values(upload, recalculated_path, validation_run=None, *, include_history=True):
     manifest = _load_manifest(upload)
     if not manifest.get("management_v2"):
+        return 0
+    if not include_history:
+        _sync_dimensions(upload)
+        _sync_metric_metadata(upload, manifest)
         return 0
     path = Path(recalculated_path)
     if not path.exists() and not path.is_absolute():

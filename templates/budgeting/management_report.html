@@ -13,6 +13,7 @@
 {% endblock %}
 
 {% block content %}
+{% if data_unavailable %}<p class="message message--error">{{ data_unavailable }}</p>{% endif %}
   {% if user.is_admin_role %}
     {% url 'management_report_drilldown' report_code as drilldown_url %}
   {% endif %}
@@ -20,16 +21,16 @@
     <div>
       <p class="eyebrow">财务报表</p>
       <h1>{{ report_name|default:report_code|default:"管理报表" }}</h1>
-      <p class="lede">{{ report_scope|default:"公司正式汇总" }} · 当前周期汇总，金额单位：元。</p>
+      <p class="lede">{{ report_scope|default:"公司汇总" }} · 当前周期汇总，金额单位：元。</p>
     </div>
     <div class="actions actions--end">
       {% if user.is_admin_role and first_row_code and first_period %}
-        <a class="button button--secondary" href="{{ drilldown_url }}?row_code={{ first_row_code|urlencode }}&amp;period={{ first_period|urlencode }}{% if selected_project %}&amp;project_id={{ selected_project.id }}{% endif %}">查看首项穿透</a>
+        <a class="button button--secondary" href="{{ drilldown_url }}{{ project_scope_query }}&amp;row_code={{ first_row_code|urlencode }}&amp;period={{ first_period|urlencode }}{% if selected_project %}&amp;project_id={{ selected_project.id }}{% endif %}">查看首项穿透</a>
       {% endif %}
       {% if selected_project %}
         <span class="badge">项目：{{ selected_project.code }} {{ selected_project.name }}</span>
       {% else %}
-        <span class="badge">公司正式汇总</span>
+        <span class="badge">{{ report_scope|default:"公司汇总" }}</span>
       {% endif %}
     </div>
   </section>
@@ -55,13 +56,16 @@
   <form method="get" class="planning-filter report-period-filter">
     {% if selected_project %}<input type="hidden" name="project_id" value="{{ selected_project.pk }}">{% endif %}
     {% if cycle %}<input type="hidden" name="cycle" value="{{ cycle.pk }}">{% endif %}
+    {% if source_mode %}<input type="hidden" name="projects" value="{{ project_ids_query }}"><label for="source-mode">数据版本</label><select id="source-mode" name="source_mode" onchange="this.form.submit()"><option value="WORKING"{% if source_mode == "WORKING" %} selected{% endif %}>工作稿</option><option value="APPROVED"{% if source_mode == "APPROVED" %} selected{% endif %}>正式稿</option>{% if snapshot_id %}<option value="FROZEN"{% if source_mode == "FROZEN" %} selected{% endif %}>已归档预算</option>{% endif %}</select><input type="hidden" name="snapshot" value="{{ snapshot_id }}">{% endif %}
     <label for="report-period-scope">数据期间</label>
     <select id="report-period-scope" name="period_scope" aria-label="数据期间" onchange="this.form.submit()">
       {% for option in period_options %}<option value="{{ option.value }}"{% if option.value == period_scope %} selected{% endif %}>{{ option.label }}</option>{% endfor %}
     </select>
   </form>
 
-  <section class="report-table-section" aria-labelledby="report-table-title">
+  {% if coverage %}<p>项目覆盖 {{ coverage.available }} / {{ coverage.expected }} · {{ report_scope }}。缺失数据以“—”显示。</p>{% for item in missing_projects %}<p>{{ item.name }}：{{ item.reason }}</p>{% endfor %}{% endif %}
+{% if coverage %}<a class="button button--secondary" href="{{ project_scope_query }}&amp;download=xlsx">导出当前报表</a>{% endif %}
+<section class="report-table-section" aria-labelledby="report-table-title">
     <div class="section-heading">
       <div>
         <p class="eyebrow">报表明细</p>
@@ -86,7 +90,7 @@
                   <th scope="row">{{ row.label|default:row.code|default:"—" }}</th>
                   {% for period in periods %}
                     <td class="num">
-                      {% if user.is_admin_role %}<a class="text-link" href="{{ drilldown_url }}?row_code={{ row.code|urlencode }}&amp;period={{ period|urlencode }}{% if selected_project %}&amp;project_id={{ selected_project.id }}{% endif %}">{% endif %}
+                      {% if user.is_admin_role %}<a class="text-link" href="{{ drilldown_url }}{{ project_scope_query }}&amp;row_code={{ row.code|urlencode }}&amp;period={{ period|urlencode }}{% if selected_project %}&amp;project_id={{ selected_project.id }}{% endif %}">{% endif %}
                       {% report_value values row.code period units %}
                       {% if user.is_admin_role %}</a>{% endif %}
                     </td>

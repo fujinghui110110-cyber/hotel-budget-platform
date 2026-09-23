@@ -21,7 +21,7 @@
       {% if form %}
         {{ form.as_p }}
       {% else %}
-        <p><label for="id_file">预算套表（.xlsx）</label><input id="id_file" name="file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required><small class="field-help">最大 50 MiB。</small></p>
+        <p><label for="id_file">预算套表（Excel）</label><input id="id_file" name="file" type="file" accept=".xlsx,.xlsm" required><small class="field-help">最大 50 MB。</small></p>
       {% endif %}
       <div class="actions">
         <button class="button button--primary" type="submit">上传并开始校验</button>
@@ -32,7 +32,8 @@
   <section class="panel panel--muted" aria-labelledby="upload-note-title">
     <h2 id="upload-note-title">请先确认</h2>
     <ul class="check-list">
-      <li>文件格式为 <code>.xlsx</code>，并且来自当前发布的统一模板。</li>
+    {% if cycle.source_budget_year %}<li>上传 {{ cycle.source_budget_year }} 年历史原表（.xlsx 或 .xlsm），只读取已保存的数值与公式；原件不变，不执行宏或刷新外链。</li>{% else %}      <li>文件格式为 <code>.xlsx</code>，使用当前统一模板的汇总表。可以新增或调整附表；平台以汇总表为准，完整原件留存供管理端下载。</li>{% endif %}
+      <li>已识别预算科目的空白输入按 0 计入；缺少汇总表、无法匹配科目或公式计算错误仍会提醒。</li>
       <li>不要覆盖旧版本；每次上传都会建立可追溯的版本记录。</li>
       <li>上传完成不等于提交或批准，请在详情页确认校验状态。</li>
     </ul>

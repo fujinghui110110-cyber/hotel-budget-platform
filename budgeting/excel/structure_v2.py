@@ -5,6 +5,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from django.conf import settings
+from budgeting.services.template_paths import resolve_template_path
 
 NS = {'m': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
 REL = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id'
@@ -47,7 +48,7 @@ def _contents(path):
 
 
 def validate_v2_structure(upload, path):
-    manifest_path = Path(upload.template.manifest_path)
+    manifest_path = resolve_template_path(upload.template.manifest_path)
     if not manifest_path.is_absolute():
         manifest_path = settings.BASE_DIR / manifest_path
     if not manifest_path.exists():
@@ -55,18 +56,42 @@ def validate_v2_structure(upload, path):
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     if not manifest.get('management_v2'):
         return []
-    source = Path(upload.template.file_path)
+    source = resolve_template_path(upload.template.file_path)
     if not source.is_absolute():
         source = settings.BASE_DIR / source
     expected_sheets, expected = _contents(source)
     sheets, values = _contents(path)
     issues = []
-    if sheets != expected_sheets:
-        issues.append(('P0', 'V2_SHEET_STRUCTURE', '工作表顺序、名称或可见性与签名模板不一致。'))
+    report_sheets = {report['sheet'] for report in manifest.get('reports', {}).values() if report.get('sheet')}
+    protected = report_sheets | {'SYS_META'} if report_sheets else {name for name, _ in expected_sheets}
+    actual_sheets = dict(sheets)
+    if any(actual_sheets.get(name) != state for name, state in expected_sheets if name in protected):
+        issues.append(('P0', 'V2_SHEET_STRUCTURE', '汇总工作表名称或可见性与签名模板不一致。'))
     editable = {(sheet, ref) for sheet, refs in manifest.get('input_cells', {}).items() for ref in refs}
     editable.update(('SYS_META', f'B{row}') for row in range(1, 7))
+    # Historical identity is signed and checked by validate_history_identity.
+    history_keys = {'history_binding_id', 'history_binding_hash',
+                    'history_baseline_id', 'history_baseline_hash'}
+    for (sheet, ref), value in values.items():
+        if sheet == 'SYS_META' and ref.startswith('A') and value in history_keys:
+            editable.update({(sheet, ref), (sheet, 'B' + ref[1:])})
+    if getattr(getattr(upload, 'cycle', None), 'plan_id', None):
+        from budgeting.services.plan_history import current_binding
+        from budgeting.services.history_workbook import template_cell_payload
+        from openpyxl import load_workbook
+        binding = current_binding(upload.cycle.plan, upload.project)
+        if binding:
+            workbook = load_workbook(source, read_only=True, data_only=False)
+            try:
+                # Exact historical amounts remain checked by validate_workbook_history.
+                for item in template_cell_payload(binding, manifest, workbook):
+                    if not item['mapping_missing']:
+                        editable.add((item['sheet'], item['cell']))
+            finally:
+                workbook.close()
+
     for key in sorted(set(expected) | set(values)):
-        if key not in editable and values.get(key, '') != expected.get(key, ''):
+        if key[0] in protected and key not in editable and values.get(key, '') != expected.get(key, ''):
             issues.append(('P0', 'V2_SYSTEM_CELL_CHANGED', '非填报单元格发生变化。', '!'.join(key)))
             if len(issues) >= 30:
                 break

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}系统更新 · 酒店预算系统{% endblock %}
+{% block breadcrumb %}<span>系统设置</span><span aria-hidden="true">/</span><span>系统更新</span>{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/access.css' %}"><link rel="stylesheet" href="{% static 'css/update.css' %}?v=20260911-3">{% endblock %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">电脑服务器</p><h1>系统更新</h1><p class="lede">检查已发布的稳定版本，一键更新服务器，各项目刷新网页即可使用新版。</p></div></section>
+{% if local_control %}
+<div id="update-controls" data-status-url="{% url 'update_status' %}" data-action-url="{% url 'update_action' %}">
+<section class="panel update-panel">
+<div class="section-heading"><h2>版本与更新</h2><span class="badge" id="update-badge">{% if initial_state.busy %}更新中{% elif initial_state.configured %}待检查{% else %}待配置凭据{% endif %}</span></div>
+<dl class="update-versions"><div><dt>当前版本</dt><dd id="update-current">{{ initial_state.current_version|default:"未标记版本" }}</dd></div><div><dt>可用版本</dt><dd id="update-available">{{ initial_state.available_version|default:"尚未检查" }}</dd></div></dl>
+<p id="update-status" role="status" aria-live="polite">{% if initial_state.busy %}正在更新，请勿关闭服务器。{% elif initial_state.configured %}点击检查更新，获取最新发布版本。{% else %}请先在下方保存 GitHub 下载凭据，然后检查更新。{% endif %}</p>
+<p id="update-error" class="message message--error" role="alert" {% if not initial_state.error %}hidden{% endif %}>{{ initial_state.error }}</p>
+<div id="update-notes-wrap" hidden><h3>更新说明</h3><pre id="update-notes"></pre></div>
+<form id="update-form" method="post">{% csrf_token %}<div class="access-actions"><button class="button button--secondary" type="submit" name="action" value="check" id="update-check" {% if initial_state.busy %}disabled{% endif %}>检查更新</button><button class="button button--primary" type="submit" name="action" value="install" id="update-install" disabled>更新并重启</button><button class="button button--secondary" type="button" id="update-retry" hidden>重新读取状态</button></div></form>
+<p class="access-note">更新前自动备份数据库和配置，保留账号、预算文件与已上传数据。升级期间请暂停填报；页面短暂断开后会自动重连。升级失败时保留完整备份与维护状态，避免覆盖新增数据。更新会暂停公网访问，完成后请到“公网访问”页重新生成项目链接；如新版依赖有变化，安装时需联网下载。</p>
+</section>
+<section class="panel update-panel"><h2>备份与版本恢复</h2>
+<p id="update-backup">{{ initial_state.backup_status }}</p>
+<form id="update-rollback-form">{% csrf_token %}<label for="update-rollback-version">保留的版本（执行前检查兼容性）</label>
+<select id="update-rollback-version" name="version">{% for version in initial_state.rollback_versions %}<option>{{ version }}</option>{% empty %}<option value="">暂无保留版本</option>{% endfor %}</select>
+<button type="submit" name="action" value="rollback" class="button button--secondary">回退到兼容版本</button></form>
+<p>恢复旧版程序会保留当前预算数据及新增上传。如需恢复历史备份，请先核对数据范围并确认。</p></section>
+<section class="panel update-panel"><h2>GitHub 下载凭据</h2><p id="update-configured">{% if initial_state.configured %}已配置下载凭据，可按需更换。{% else %}尚未配置下载凭据。{% endif %}</p><p>首次使用需填写私有仓库的只读下载凭据。凭据仅保存在本机，不会显示给项目用户。</p>
+<form id="update-config-form" method="post">{% csrf_token %}<label for="update-token">仅本系统仓库 · Contents 与 Attestations 只读凭据</label><div class="access-link-row"><input id="update-token" type="password" name="token" autocomplete="new-password" maxlength="512" placeholder="输入新凭据后保存" required><button class="button button--secondary" id="update-save" type="submit" {% if initial_state.busy %}disabled{% endif %}>保存凭据</button></div></form>
+<details class="access-note"><summary>第一次使用？展开查看凭据设置步骤</summary>
+<p>这是一把只用来下载系统更新的钥匙，不是预算系统的登录密码。只需在服务器电脑设置一次，各项目不用设置。</p>
+<ol>
+<li>在此电脑打开 <a href="https://github.com/settings/personal-access-tokens/new?name=Budget-server-update&amp;target_name=fujinghui110110-cyber&amp;expires_in=90&amp;contents=read&amp;attestations=read" target="_blank" rel="noopener noreferrer">GitHub 官方凭据创建页</a>，登录拥有本系统仓库的 GitHub 账号 <strong>fujinghui110110-cyber</strong>。</li>
+<li>确认 Resource owner 为上述账号，Expiration 为 90 天（到期后重新生成即可）。</li>
+<li>Repository access 选择 <strong>Only select repositories</strong>，勾选 <strong>hotel-budget-platform</strong>。此项需要手动选择。</li>
+<li>在 Permissions 中确认 <strong>Contents: Read-only</strong> 和 <strong>Attestations: Read-only</strong>；Metadata 的默认只读权限保留。不要增加写入权限。</li>
+<li>点击 <strong>Generate token</strong>，在弹出的确认框中再点击一次 <strong>Generate token</strong>，立即复制生成的完整凭据，回到此页粘贴到凭据输入框，点击“保存凭据”，再点击上方“检查更新”。</li>
+</ol>
+<p>生成后完整凭据只显示一次。请勿发送到聊天或放进截图；如遗失或到期，重新生成后在这里替换即可。看不到仓库时，先检查 GitHub 登录账号是否正确。</p>
+<p>仅已正式发布的版本可供安装。更换电脑时，请迁移原系统的数据备份，原账号和预算数据不会自动同步。</p>
+</details>
+<p class="access-note">使用仅授权本系统仓库、Contents 与 Attestations 只读权限的 GitHub fine-grained token。保存后输入框清空；留空不会修改原凭据。</p></section>
+<noscript><p class="message message--error">请启用 JavaScript，以检查更新和查看升级结果。</p></noscript>
+</div>
+{% else %}<section class="panel update-panel"><h2>请在服务器电脑上更新</h2><p>在运行系统的电脑打开 <strong>http://127.0.0.1:8768</strong>，登录管理员账号后检查并安装更新。</p></section>{% endif %}
+{% if local_control %}{{ initial_state|json_script:"update-initial-state" }}<script src="{% static 'budgeting/update.js' %}?v=20260911-3" defer></script>{% endif %}{% endblock %}

@@ -2,17 +2,25 @@ from collections import Counter
 
 from django import forms
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 
 from budgeting.models import REPORTS, NormalizedValue, Project
 
 
 class UploadForm(forms.Form):
-    file = forms.FileField(label="预算套表", help_text="仅允许 .xlsx，最大 50 MiB。")
+    file = forms.FileField(label="预算套表", help_text="支持 .xlsx、.xlsm，最大 50 MB。")
+
+    def __init__(self, *args, cycle=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.is_rehearsal = bool(cycle and cycle.source_budget_year)
+        if self.is_rehearsal:
+            self.fields["file"].help_text = "历史原表演练：支持 .xlsx、.xlsm，最大 50 MiB；不执行宏或刷新外链。"
 
     def clean_file(self):
         upload = self.cleaned_data["file"]
-        if not upload.name.lower().endswith(".xlsx"):
-            raise forms.ValidationError("仅允许上传 .xlsx 文件。")
+        suffixes = (".xlsx", ".xlsm")
+        if not upload.name.lower().endswith(suffixes):
+            raise forms.ValidationError("请选择 .xlsx 或 .xlsm 格式的 Excel 文件。")
         if upload.size > 50 * 1024 * 1024:
             raise forms.ValidationError("压缩文件超过 50 MiB。")
         return upload
@@ -90,6 +98,11 @@ class ProjectAccountForm(forms.Form):
         cleaned = super().clean()
         if not cleaned.get("is_admin") and not cleaned.get("project"):
             self.add_error("project", "项目账号必须绑定一个项目。")
+        if cleaned.get("password"):
+            try:
+                validate_password(cleaned["password"], get_user_model()(username=cleaned.get("username", "")))
+            except forms.ValidationError as exc:
+                self.add_error("password", exc)
         return cleaned
 
     def clean_username(self):
@@ -102,3 +115,13 @@ class ProjectAccountForm(forms.Form):
 class ResetPasswordForm(forms.Form):
     username = forms.CharField(label="账号", max_length=150)
     new_password = forms.CharField(label="新密码", widget=forms.PasswordInput(render_value=True))
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("new_password"):
+            user = get_user_model().objects.filter(username=cleaned.get("username", "")).first()
+            try:
+                validate_password(cleaned["new_password"], user)
+            except forms.ValidationError as exc:
+                self.add_error("new_password", exc)
+        return cleaned

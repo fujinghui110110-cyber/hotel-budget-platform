@@ -72,8 +72,8 @@ class StructureV2Tests(SimpleTestCase):
         self.assertEqual(len(issues), 2)
         self.assertTrue(all(issue[1] == 'V2_SYSTEM_CELL_CHANGED' for issue in issues))
 
-    def test_extra_sheet_rejected(self):
+    def test_extra_sheet_allowed(self):
         workbook = load_workbook(self.template)
         workbook.create_sheet('私加表')
         workbook.save(self.submitted)
-        self.assertEqual(validate_v2_structure(self.upload, self.submitted)[0][1], 'V2_SHEET_STRUCTURE')
+        self.assertEqual(validate_v2_structure(self.upload, self.submitted), [])

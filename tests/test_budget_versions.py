@@ -261,3 +261,23 @@ class BudgetVersionPageTests(TestCase):
         response = self.client.get(reverse("management_budget_versions"))
 
         self.assertEqual(response.status_code, 404)
+
+
+class RehearsalVersionBoundaryTests(TestCase):
+    def test_rehearsal_is_explicit_and_project_cannot_choose_source_year(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from budgeting.forms import UploadForm
+        template = TemplateVersion.objects.create(version='V3-2030', budget_year=2030)
+        cycle = create_and_open_budget_version(budget_year=2030, source_budget_year=2029, template=template)
+        self.assertEqual(cycle.source_budget_year, 2029)
+        file = SimpleUploadedFile('legacy.xlsm', b'workbook')
+        self.assertTrue(UploadForm(files={'file': file}, cycle=cycle).is_valid())
+        standard = create_and_open_budget_version(budget_year=2030, template=template)
+        self.assertIsNone(standard.source_budget_year)
+        form = UploadForm(data={'source_budget_year': '2029'}, files={'file': file}, cycle=standard)
+        self.assertTrue(form.is_valid())
+        self.assertNotIn('source_budget_year', form.cleaned_data)
+        standard.refresh_from_db()
+        self.assertIsNone(standard.source_budget_year)
+        with self.assertRaisesMessage(ValueError, '演练原表年度'):
+            create_and_open_budget_version(budget_year=2030, source_budget_year=2031, template=template)

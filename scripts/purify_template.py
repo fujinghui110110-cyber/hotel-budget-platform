@@ -129,11 +129,11 @@ def replace_proprietary(text):
     upper = text.upper().strip()
     if upper.startswith("VIEW("):
         quoted = re.findall(r'"([^"]*)"', text)
-        return (quoted[-1] if quoted else ""), True, None
+        return ('"' + (quoted[-1] if quoted else "").replace('"', '""') + '"'), True, None
     if upper.startswith("SUBNM("):
         quoted = re.findall(r'"([^"]*)"', text)
         return (
-            (quoted[2] if len(quoted) >= 3 else quoted[-1] if quoted else ""),
+            ('"' + (quoted[2] if len(quoted) >= 3 else quoted[-1] if quoted else "").replace('"', '""') + '"'),
             True,
             None,
         )
@@ -288,7 +288,7 @@ def enforce_strict_annual_formulas(root, name, report):
         if row in contract["count_sum"]:
             formula_node.text = f"SUM({month_range})"
         elif row in contract["average"]:
-            formula_node.text = f"ROUND(AVERAGE({month_range}),0)"
+            formula_node.text = f"IF(COUNT({month_range})=0,0,ROUND(AVERAGE({month_range}),0))"
         elif row in contract["ratio"]:
             numerator_row, denominator_row = contract["ratio"][row]
             annual_column = contract["annual_column"]
@@ -304,10 +304,19 @@ def enforce_strict_annual_formulas(root, name, report):
                 f"{annual_column}{numerator_row}/{annual_column}{denominator_row}),2)"
             )
         else:
-            rounded_months = ",".join(
-                f"ROUND({column}{row},2)" for column in contract["month_columns"]
-            )
-            formula_node.text = f"ROUND(SUM({rounded_months}),2)"
+            if report_code.startswith("PL_ZZ") and row == 124:
+                annual_column = contract["annual_column"]
+                formula_node.text = (
+                    f"ROUND({annual_column}113+{annual_column}121-"
+                    f"SUM({annual_column}115:{annual_column}120,{annual_column}122)+"
+                    f"{annual_column}123,2)"
+                )
+            else:
+                rounded_months = ",".join(
+                    f"ROUND({column}{row},2)"
+                    for column in contract["month_columns"]
+                )
+                formula_node.text = f"ROUND(SUM({rounded_months}),2)"
         if value is not None:
             annual.remove(value)
         report["annual_formulas_rewritten"].append(f"{name}!{annual.attrib['r']}")

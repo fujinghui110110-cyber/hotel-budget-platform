@@ -40,3 +40,22 @@ admin.site.register(AdjustmentLine)
 admin.site.register(FreezeSnapshot)
 admin.site.register(SnapshotArtifact)
 admin.site.register(AuditEvent)
+
+
+class ImmutableHistoryAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+from budgeting.models import BudgetPlan, PlanProject, HistoryBaseline, HistoryBaselineValue, PlanHistoryBinding
+
+for history_model in (BudgetPlan, PlanProject, HistoryBaseline, HistoryBaselineValue, PlanHistoryBinding):
+    admin.site.register(history_model, ImmutableHistoryAdmin)
+admin.site.unregister(AuditEvent)
+admin.site.register(AuditEvent, ImmutableHistoryAdmin)

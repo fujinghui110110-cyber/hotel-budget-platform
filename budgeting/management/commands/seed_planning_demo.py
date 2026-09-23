@@ -119,7 +119,7 @@ class Command(BaseCommand):
         year = options["year"]
         if year not in range(2003, 2101):
             raise CommandError("预算年度需在 2003 至 2100 之间。")
-        manifest = json.loads((settings.BASE_DIR / "artifacts/template_manifest.json").read_text())
+        manifest = json.loads((settings.BASE_DIR / "artifacts/template_manifest.json").read_text(encoding="utf-8"))
         cycle = BudgetCycle.objects.create(name=f"{year} 年预算（演示）", budget_year=year, status="OPEN")
         user = User.objects.create(username="admin", role="ADMIN", is_staff=True, is_superuser=True,
                                    first_name="预算管理者")

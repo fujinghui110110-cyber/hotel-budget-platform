@@ -242,7 +242,7 @@ def _safe_storage_path(
             f"{upload.project.code} 的{artifact}文件路径超出存储目录，已拒绝下载。",
             code="UNSAFE_FILE_PATH",
         ) from exc
-    if path.suffix.lower() != ".xlsx":
+    if path.suffix.lower() not in {".xlsx", ".xlsm"}:
         raise WorkpaperExportError(
             f"{upload.project.code} 的{artifact}文件不是 XLSX 文件，无法下载。",
             code="INVALID_FILE_TYPE",
@@ -310,7 +310,7 @@ def download_filename(workpaper: WorkpaperFile) -> str:
     project_code = _safe_name(workpaper.upload.project.code, "project")
     cycle_year = workpaper.upload.cycle.budget_year
     suffix = "原始" if workpaper.artifact == "original" else "重算"
-    return f"{project_code}-{cycle_year}-{str(workpaper.upload.id)[:8]}-{suffix}.xlsx"
+    return f"{project_code}-{cycle_year}-{str(workpaper.upload.id)[:8]}-{suffix}{workpaper.path.suffix.lower()}"
 
 
 def _relative_source_path(path: Path) -> str:
@@ -430,7 +430,11 @@ def preflight_cycle_workpapers(
                 }
             )
             continue
-        for artifact in ("original", "recalculated"):
+        for artifact in (
+            ("original",)
+            if cycle_obj.source_budget_year
+            else ("original", "recalculated")
+        ):
             availability = check_workpaper_file(upload, artifact)
             if not availability.available:
                 issues.append(
@@ -466,7 +470,11 @@ def build_cycle_workpaper_zip(
     uploads, omitted = _selected_for_batch(cycle_obj, normalized, project_ids)
     workpapers: list[tuple[WorkpaperFile, str]] = []
     for upload in uploads:
-        for artifact in ("original", "recalculated"):
+        for artifact in (
+            ("original",)
+            if cycle_obj.source_budget_year
+            else ("original", "recalculated")
+        ):
             workpaper = resolve_workpaper_file(upload, artifact)
             project_code = _safe_name(
                 upload.project.code, f"project-{upload.project_id}"
@@ -474,7 +482,7 @@ def build_cycle_workpaper_zip(
             archive_path = (
                 f"{project_code}/{cycle_obj.budget_year}/"
                 f"{project_code}-{str(upload.id)[:8]}-"
-                f"{'original' if artifact == 'original' else 'recalculated'}.xlsx"
+                f"{'original' if artifact == 'original' else 'recalculated'}{workpaper.path.suffix.lower()}"
             )
             workpapers.append((workpaper, archive_path))
 
@@ -489,6 +497,8 @@ def build_cycle_workpaper_zip(
             "id": cycle_obj.pk,
             "name": cycle_obj.name,
             "budget_year": cycle_obj.budget_year,
+            "source_budget_year": cycle_obj.source_budget_year,
+            "recalculated": not bool(cycle_obj.source_budget_year),
             "revision_no": cycle_obj.revision_no,
             "status": cycle_obj.status,
         },

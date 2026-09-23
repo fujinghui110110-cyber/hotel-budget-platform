@@ -79,7 +79,7 @@ class ProportionalScenarioIssueTests(ScenarioFixtureMixin, TestCase):
 
         graph_codes = {}
         for report_code in REPORT_ROWS:
-            graph, _numbers, _values, _order = _project_report(self.project, self.cycle, report_code)
+            graph, _numbers, _values, _order, _upload = _project_report(self.project, self.cycle, report_code)
             graph_codes[report_code] = set(graph)
         NormalizedValue.objects.filter(upload=self.upload).delete()
         for report_code in REPORT_ROWS:

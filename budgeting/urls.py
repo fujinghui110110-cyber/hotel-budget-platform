@@ -1,13 +1,31 @@
+from budgeting import history_views, batch_views
+from budgeting import update_views
 from django.urls import include, path
+from . import processing_views
 
-from budgeting import views
+from budgeting import views, data_audit_views
 from budgeting import cockpit_views
 from budgeting import planning_views
 from budgeting import workpaper_views
 from budgeting import version_report_views, summary_views
+from budgeting import access_views
 
 
 urlpatterns = [
+    path('management/metrics/', include('budgeting.management_metric_urls')),
+    path("", include("budgeting.target_urls")),
+    path("management/batch-upload/", batch_views.batch_upload, name="management_batch_upload"),
+    path("management/history/", history_views.history_management, name="history_management"),
+    path("management/history/<uuid:batch_id>/", history_views.history_review, name="history_review"),
+    path("management/history/<uuid:batch_id>/original/", history_views.history_original, name="history_original"),
+    path("management/update/", update_views.update_management, name="update_management"),
+    path("management/update/status/", update_views.update_status, name="update_status"),
+    path("management/update/action/", update_views.update_action, name="update_action"),
+    path("management/access/", access_views.access_management, name="access_management"),
+    path("management/access/status/", access_views.access_status, name="access_status"),
+    path("management/access/action/", access_views.access_action, name="access_action"),
+    path("special-indicators/", include("budgeting.special_indicator_urls")),
+    path("data-audit/", data_audit_views.data_audit, name="data_audit"),
     path("", include("budgeting.version_urls")),
     path("management/summary-adjustments/", summary_views.summary_list, name="summary_list"),
     path("management/summary-adjustments/<uuid:scenario_id>/", summary_views.summary_detail, name="summary_detail"),
@@ -40,6 +58,7 @@ urlpatterns = [
     path("project/template/", views.template_download, name="project_template_download"),
     path("project/uploads/new", views.upload_new, name="project_upload_new"),
     path("project/uploads/<uuid:upload_id>/", views.project_upload_detail, name="project_upload_detail"),
+    path("project/uploads/<uuid:upload_id>/retry/", processing_views.retry_upload, name="upload_retry"),
     path("project/uploads/<uuid:upload_id>/submit", views.project_submit_upload, name="project_submit_upload"),
     path("project/uploads/<uuid:upload_id>/submit", views.project_submit_upload, name="project_upload_submit"),
     path("project/adjustments/", views.project_adjustments, name="project_adjustments"),

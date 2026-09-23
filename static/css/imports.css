@@ -1,0 +1,15 @@
+.import-workspace .page-heading{align-items:flex-start;gap:24px;flex-wrap:wrap}
+.import-workspace .page-heading h1{margin-bottom:12px}
+.import-workspace .page-heading p{line-height:1.6;margin:8px 0;color:#536273}
+.import-actions{display:flex;gap:12px;flex-wrap:wrap}
+.import-workspace .table-subtext{display:block;margin-top:6px;color:#687787;font-size:12px}
+.import-workspace .field-group{margin-bottom:20px}
+.import-workspace table{width:100%}
+.import-workspace td{vertical-align:top;line-height:1.6}
+.import-workspace form p{max-width:760px;margin:18px 0}
+.import-workspace form p label{display:block;font-weight:600;margin-bottom:8px}
+.import-workspace form p .helptext{display:block;margin-top:6px;font-size:13px;color:#687787}
+.import-workspace select{max-width:100%}
+.import-workspace .table-scroll select{min-width:260px}
+.import-workspace li{line-height:1.8}
+@media(max-width:760px){.import-workspace .table-scroll{overflow:auto}.import-workspace .table-scroll table{min-width:780px}}

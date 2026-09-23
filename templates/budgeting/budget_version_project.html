@@ -5,6 +5,7 @@
 {% block breadcrumb %}<span>预算版本</span><span aria-hidden="true">/</span><span>{{ project.name }}</span>{% endblock %}
 
 {% block content %}
+{% include 'budgeting/includes/annual_targets_link.html' with target_project=project %}
 <section class="page-heading page-heading--split">
   <div><p class="eyebrow">{{ version_label }}</p><h1>{{ project.code }} {{ project.name }}</h1><p class="lede">查看项目在当前预算版本中的报表和原始底稿。</p></div>
   <div class="actions actions--end"><a class="button button--ghost" href="{% url 'management_budget_versions' %}?cycle={{ cycle.pk }}">返回版本清单</a></div>

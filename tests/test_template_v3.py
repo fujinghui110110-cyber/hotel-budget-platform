@@ -15,6 +15,7 @@ from budgeting.excel.template_v3 import (
     protect_workbook,
     repair_confirmed_findings,
     recover_dense_row_numeric_inputs,
+    refresh_report_mapping_formulas,
     rolling_history_columns,
 )
 
@@ -122,6 +123,63 @@ class TemplateV3Tests(SimpleTestCase):
         self.assertIsNone(reports["PL"]["mapping"][0]["formula"])
         self.assertEqual(reports["PL"]["mapping"][1]["classification"], "formula")
 
+    def test_report_mapping_formulas_refresh_from_final_workbook(self):
+        formulas = [
+            {
+                "sheet": "管理表",
+                "cell": "J23",
+                "formula": "IF(COUNT(L23:W23)=0,0,ROUND(AVERAGE(L23:W23),0))",
+                "shared_attributes": {},
+            },
+            {
+                "sheet": "管理表",
+                "cell": "S124",
+                "formula": "ROUND(S113+S121-SUM(S115:S120,S122)+S123,2)",
+                "shared_attributes": {"t": "shared"},
+            },
+        ]
+        reports = {
+            "PL": {
+                "sheet": "管理表",
+                "mapping": [
+                    {
+                        "cell": "J23",
+                        "source": {"sheet": "管理表", "cell": "J23"},
+                        "classification": "formula",
+                        "formula": "ROUND(AVERAGE(L23:W23),0)",
+                        "shared_attributes": {},
+                        "allowed_functions": ["AVERAGE", "ROUND"],
+                    },
+                    {
+                        "cell": "S124",
+                        "source": {"sheet": "管理表", "cell": "S124"},
+                        "classification": "formula",
+                        "formula": "ROUND(SUM(ROUND(F124,2),ROUND(G124,2)),2)",
+                        "shared_attributes": {},
+                        "allowed_functions": ["ROUND", "SUM"],
+                    },
+                    {
+                        "cell": "A1",
+                        "source": {"sheet": "管理表", "cell": "A1"},
+                        "classification": "formula",
+                        "formula": "1+1",
+                        "shared_attributes": {"t": "shared"},
+                        "allowed_functions": [],
+                    },
+                ],
+            }
+        }
+
+        refresh_report_mapping_formulas(reports, formulas)
+
+        mapping = reports["PL"]["mapping"]
+        self.assertEqual(mapping[0]["formula"], "IF(COUNT(L23:W23)=0,0,ROUND(AVERAGE(L23:W23),0))")
+        self.assertEqual(mapping[0]["allowed_functions"], ["AVERAGE", "COUNT", "IF", "ROUND"])
+        self.assertEqual(mapping[1]["formula"], "ROUND(S113+S121-SUM(S115:S120,S122)+S123,2)")
+        self.assertEqual(mapping[1]["shared_attributes"], {"t": "shared"})
+        self.assertEqual(mapping[2]["classification"], "input")
+        self.assertIsNone(mapping[2]["formula"])
+
     def test_confirmed_findings_become_formula_fix_or_explicit_input(self):
         workbook = Workbook()
         workbook.active.title = "B12中餐厅"
@@ -150,9 +208,17 @@ class TemplateV3Tests(SimpleTestCase):
         ):
             workbook.create_sheet(sheet_name)
         workbook["B12中餐厅"]["K98"] = "=IFERROR(#REF!,0)"
+        workbook["B12中餐厅"]["H1"] = "=IFERROR(!,0)"
+        workbook["B12中餐厅"]["L98"] = "=SUM(L100:L101)"
+        workbook["B12中餐厅"]["M98"] = 12345
         required, repaired = repair_confirmed_findings(workbook)
+        self.assertEqual(workbook["B12中餐厅"]["H1"].value, '=IFERROR("!",0)')
         self.assertIsNone(workbook["B12中餐厅"]["K98"].value)
         self.assertIn("K98", required["B12中餐厅"])
+        self.assertEqual(workbook["B12中餐厅"]["L98"].value, "=SUM(L100:L101)")
+        self.assertEqual(workbook["B12中餐厅"]["M98"].value, 12345)
+        self.assertNotIn("L98", required["B12中餐厅"])
+        self.assertNotIn("M98", required["B12中餐厅"])
         for sheet_name in ("损益表（含名酒）（拆中智）", "损益表（不含名酒）（拆中智）"):
             self.assertEqual(workbook[sheet_name]["S124"].value, "=ROUND(S113+S121-SUM(S115:S120,S122)+S123,2)")
         self.assertEqual(workbook["A1客房收入(新)"]["AE38"].value, "=IF(AE69=0,0,AE100/AE69)")
@@ -175,18 +241,20 @@ class TemplateV3Tests(SimpleTestCase):
         )
         self.assertEqual(
             workbook["B14送餐"]["Q31"].value,
-            "=ROUND(Q25*$W$31,2)+'经营补充指标'!J8",
+            "=ROUND(Q25*$W$31,2)",
         )
-        self.assertEqual(len(repaired), 81)
+        # Only K98 has a broken source; the other nine B12 cells stay intact.
+        self.assertEqual(len(repaired), 72)
 
     def test_supplementary_wine_inputs_are_separate_from_pnl(self):
         workbook = Workbook()
         workbook.active.title = "原表"
         inputs = add_supplementary_sheet(workbook)
         sheet = workbook["经营补充指标"]
-        self.assertEqual(len(inputs), 60)
+        self.assertEqual(len(inputs), 48)
         self.assertEqual(inputs[:12], [f"{column}3" for column in "DEFGHIJKLMNO"])
-        self.assertEqual(inputs[-12:], [f"{column}8" for column in "DEFGHIJKLMNO"])
+        self.assertEqual(inputs[-12:], [f"{column}7" for column in "DEFGHIJKLMNO"])
+        self.assertIsNone(sheet["A8"].value)
         self.assertEqual(sheet["C3"].value, "=SUM(D3:O3)")
         self.assertEqual(sheet["C5"].value, "=SUM(D5:O5)")
         self.assertIn("不得重复加总", sheet["A2"].value)

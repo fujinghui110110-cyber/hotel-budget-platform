@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
 from django.conf import settings
+from budgeting.services.template_paths import resolve_template_path
 from openpyxl import load_workbook
 from openpyxl.utils.cell import coordinate_to_tuple, get_column_letter
 
@@ -133,6 +134,10 @@ def extract_report_values(upload, workbook_path, validation_run=None):
                 continue
             value = values.get(_cell_key(cell_ref))
             formula = formulas.get(_cell_key(cell_ref), "")
+            # Confirmed budget policy: a mapped non-formula blank input means zero.
+            # A formula without its numeric cache must still fail validation.
+            if value in (None, "") and not formula:
+                value = 0
             if strict and (value is None or value == "" or isinstance(value, str) and value.startswith("#")):
                 if validation_run is not None:
                     ValidationIssue.objects.create(
@@ -145,15 +150,13 @@ def extract_report_values(upload, workbook_path, validation_run=None):
                 try:
                     numeric = Decimal(str(value))
                     valid = numeric.is_finite() and not isinstance(value, bool)
-                    if unit == NormalizedValue.Unit.COUNT:
-                        valid = valid and numeric == numeric.to_integral_value()
                 except InvalidOperation:
                     valid = False
                 if not valid:
                     if validation_run is not None:
                         ValidationIssue.objects.create(
                             run=validation_run, severity="P0", code="REPORT_VALUE_INVALID",
-                            message="报表值必须为有限数值，数量必须为整数。",
+                            message="报表值必须为有限数值，数量按四舍五入取整数。",
                             location=f"{sheet}!{cell_ref}", actual_value=str(value),
                         )
                     continue
@@ -219,7 +222,7 @@ def assign_dimensions(value, budget_year):
 def _load_manifest(upload):
     if not upload.template or not upload.template.manifest_path:
         return {"reports": {}}
-    manifest_path = Path(upload.template.manifest_path)
+    manifest_path = resolve_template_path(upload.template.manifest_path)
     if not manifest_path.is_absolute():
         manifest_path = Path(settings.BASE_DIR) / manifest_path
     if not manifest_path.exists():
@@ -703,40 +706,43 @@ def _sub_annual(upload, report_code, sheet, row_code, label, unit, monthly):
 
 def extract_sub_table_values(upload, workbook_path):
     wb = load_workbook(workbook_path, data_only=True, read_only=True)
-    skip = set(REPORTS.values()) | {"SYS_META"}
-    rows = []
-    for name in wb.sheetnames:
-        if name in skip:
-            continue
-        grid = _detect_grid(wb[name])
-        if not grid:
-            continue
-        label_col, month_cols, header_idx = grid
-        report_code = sheet_slug(name)
-        for row_idx, row in enumerate(
-            wb[name].iter_rows(min_row=header_idx + 1, values_only=False),
-            start=header_idx + 1,
-        ):
-            label_cell = _cell_at(row, label_col)
-            label = _clean_label(label_cell.value if label_cell is not None else None)
-            if not label:
+    try:
+        skip = set(REPORTS.values()) | {"SYS_META"}
+        rows = []
+        for name in wb.sheetnames:
+            if name in skip:
                 continue
-            unit = _unit_for_label(label)
-            monthly = []
-            for month, col in enumerate(month_cols, start=1):
-                cell = _cell_at(row, col)
-                value = cell.value if cell is not None else None
-                parsed = _sub_value(
-                    upload, report_code, name, f"R{row_idx:04d}", label, unit,
-                    f"{month:02d}", f"{get_column_letter(col)}{row_idx}", value,
-                )
-                if parsed is not None:
-                    monthly.append(parsed)
-            rows.extend(monthly)
-            if len(monthly) == len(month_cols):
-                rows.append(_sub_annual(upload, report_code, name, f"R{row_idx:04d}", label, unit, monthly))
-    NormalizedValue.objects.bulk_create(rows)
-    return len(rows)
+            grid = _detect_grid(wb[name])
+            if not grid:
+                continue
+            label_col, month_cols, header_idx = grid
+            report_code = sheet_slug(name)
+            for row_idx, row in enumerate(
+                wb[name].iter_rows(min_row=header_idx + 1, values_only=False),
+                start=header_idx + 1,
+            ):
+                label_cell = _cell_at(row, label_col)
+                label = _clean_label(label_cell.value if label_cell is not None else None)
+                if not label:
+                    continue
+                unit = _unit_for_label(label)
+                monthly = []
+                for month, col in enumerate(month_cols, start=1):
+                    cell = _cell_at(row, col)
+                    value = cell.value if cell is not None else None
+                    parsed = _sub_value(
+                        upload, report_code, name, f"R{row_idx:04d}", label, unit,
+                        f"{month:02d}", f"{get_column_letter(col)}{row_idx}", value,
+                    )
+                    if parsed is not None:
+                        monthly.append(parsed)
+                rows.extend(monthly)
+                if len(monthly) == len(month_cols):
+                    rows.append(_sub_annual(upload, report_code, name, f"R{row_idx:04d}", label, unit, monthly))
+        NormalizedValue.objects.bulk_create(rows)
+        return len(rows)
+    finally:
+        wb.close()
 
 
 @functools.lru_cache(maxsize=8)

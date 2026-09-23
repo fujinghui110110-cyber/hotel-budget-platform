@@ -3,6 +3,7 @@
 {% block title %}调整任务 · 酒店预算与损益管理平台{% endblock %}
 {% block breadcrumb %}{% url 'project_dashboard' as project_dashboard_url %}<a href="{{ project_dashboard_url }}">项目工作台</a><span aria-hidden="true">/</span><span>调整任务</span>{% endblock %}
 {% block content %}
+{% include 'budgeting/includes/annual_targets_link.html' with target_project=user.project %}
   {% url 'project_upload_new' as upload_new_url %}
   <section class="page-heading page-heading--split">
     <div>

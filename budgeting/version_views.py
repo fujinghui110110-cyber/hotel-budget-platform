@@ -70,6 +70,7 @@ def budget_version_open(request):
         return redirect("management_budget_versions")
     try:
         budget_year = int(request.POST.get("budget_year", ""))
+        source_budget_year = int(request.POST["source_budget_year"]) if request.POST.get("source_budget_year") else None
     except (TypeError, ValueError):
         messages.error(request, "请输入有效的预算年度。")
         return redirect("management_budget_versions")
@@ -77,6 +78,7 @@ def budget_version_open(request):
         cycle = create_and_open_budget_version(
             budget_year=budget_year,
             name=request.POST.get("name", ""),
+            source_budget_year=source_budget_year,
             actor=request.user,
         )
     except ValueError as exc:

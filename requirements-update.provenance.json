@@ -1,0 +1,87 @@
+{
+  "Django": {
+    "version": "5.2.6",
+    "metadata_url": "https://pypi.org/pypi/Django/5.2.6/json",
+    "wheels": {
+      "django-5.2.6-py3-none-any.whl": "60549579b1174a304b77e24a93d8d9fafe6b6c03ac16311f3e25918ea5a20058"
+    }
+  },
+  "asgiref": {
+    "version": "3.12.1",
+    "metadata_url": "https://pypi.org/pypi/asgiref/3.12.1/json",
+    "wheels": {
+      "asgiref-3.12.1-py3-none-any.whl": "fe386d1c2bff7259ea95929266d12a8cf9a8b5a1c2598402967d8792e7a7c094"
+    }
+  },
+  "sqlparse": {
+    "version": "0.6.0",
+    "metadata_url": "https://pypi.org/pypi/sqlparse/0.6.0/json",
+    "wheels": {
+      "sqlparse-0.6.0-py3-none-any.whl": "b861c0288ce2fa56209a9a6412d2e066ac664b3873b89c26c9d8415e8e32996f"
+    }
+  },
+  "tzdata": {
+    "version": "2025.2",
+    "metadata_url": "https://pypi.org/pypi/tzdata/2025.2/json",
+    "wheels": {
+      "tzdata-2025.2-py2.py3-none-any.whl": "1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8"
+    }
+  },
+  "openpyxl": {
+    "version": "3.1.5",
+    "metadata_url": "https://pypi.org/pypi/openpyxl/3.1.5/json",
+    "wheels": {
+      "openpyxl-3.1.5-py2.py3-none-any.whl": "5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2"
+    }
+  },
+  "et_xmlfile": {
+    "version": "2.0.0",
+    "metadata_url": "https://pypi.org/pypi/et_xmlfile/2.0.0/json",
+    "wheels": {
+      "et_xmlfile-2.0.0-py3-none-any.whl": "7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa"
+    }
+  },
+  "gunicorn": {
+    "version": "23.0.0",
+    "metadata_url": "https://pypi.org/pypi/gunicorn/23.0.0/json",
+    "wheels": {
+      "gunicorn-23.0.0-py3-none-any.whl": "ec400d38950de4dfd418cff8328b2c8faed0edb0d517d3394e457c317908ca4d"
+    }
+  },
+  "packaging": {
+    "version": "26.0",
+    "metadata_url": "https://pypi.org/pypi/packaging/26.0/json",
+    "wheels": {
+      "packaging-26.0-py3-none-any.whl": "b36f1fef9334a5588b4166f8bcd26a14e521f2b55e6b9de3aaa80d3ff7a37529"
+    }
+  },
+  "whitenoise": {
+    "version": "6.9.0",
+    "metadata_url": "https://pypi.org/pypi/whitenoise/6.9.0/json",
+    "wheels": {
+      "whitenoise-6.9.0-py3-none-any.whl": "c8a489049b7ee9889617bb4c274a153f3d979e8f51d2efd0f5b403caf41c57df"
+    }
+  },
+  "waitress": {
+    "version": "3.0.2",
+    "metadata_url": "https://pypi.org/pypi/waitress/3.0.2/json",
+    "wheels": {
+      "waitress-3.0.2-py3-none-any.whl": "c56d67fd6e87c2ee598b76abdd4e96cfad1f24cacdea5078d382b1f9d7b5ed2e"
+    }
+  },
+  "psutil": {
+    "version": "7.0.0",
+    "metadata_url": "https://pypi.org/pypi/psutil/7.0.0/json",
+    "wheels": {
+      "psutil-7.0.0-cp36-abi3-macosx_10_9_x86_64.whl": "101d71dc322e3cffd7cea0650b09b3d08b8e7c4109dd6809fe452dfd00e58b25",
+      "psutil-7.0.0-cp36-abi3-macosx_11_0_arm64.whl": "39db632f6bb862eeccf56660871433e111b6ea58f2caea825571951d4b6aa3da",
+      "psutil-7.0.0-cp36-abi3-manylinux_2_12_i686.manylinux2010_i686.manylinux_2_17_i686.manylinux2014_i686.whl": "1fcee592b4c6f146991ca55919ea3d1f8926497a713ed7faaf8225e174581e91",
+      "psutil-7.0.0-cp36-abi3-manylinux_2_12_x86_64.manylinux2010_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl": "4b1388a4f6875d7e2aff5c4ca1cc16c545ed41dd8bb596cefea80111db353a34",
+      "psutil-7.0.0-cp36-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl": "a5f098451abc2828f7dc6b58d44b532b22f2088f4999a937557b603ce72b1993",
+      "psutil-7.0.0-cp36-cp36m-win32.whl": "84df4eb63e16849689f76b1ffcb36db7b8de703d1bc1fe41773db487621b6c17",
+      "psutil-7.0.0-cp36-cp36m-win_amd64.whl": "1e744154a6580bc968a0195fd25e80432d3afec619daf145b9e5ba16cc1d688e",
+      "psutil-7.0.0-cp37-abi3-win32.whl": "ba3fcef7523064a6c9da440fc4d6bd07da93ac726b5733c29027d7dc95b39d99",
+      "psutil-7.0.0-cp37-abi3-win_amd64.whl": "4cf3d4eb1aa9b348dec30105c55cd9b7d4629285735a102beb4441e38db90553"
+    }
+  }
+}

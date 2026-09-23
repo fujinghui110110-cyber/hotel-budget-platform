@@ -33,6 +33,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "budgeting.update_middleware.UpdateMaintenanceMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -78,6 +79,25 @@ LOGOUT_REDIRECT_URL = "/login/"
 BUDGET_STORAGE_ROOT = Path(os.getenv("BUDGET_STORAGE_ROOT", BASE_DIR / "storage"))
 SOURCE_WORKBOOK = Path(os.getenv("SOURCE_WORKBOOK", BASE_DIR / "source" / "template.xlsx"))
 SOURCE_SHA256 = "bd62ff23f236b373c5f2cf38b146b7e7e5f099b38560c191fbb1ad51bf8141dc"
-SOFFICE_BIN = os.getenv("SOFFICE_BIN", shutil.which("soffice") or "/Applications/LibreOffice.app/Contents/MacOS/soffice")
+_soffice_candidates = [
+    Path(os.getenv("ProgramFiles", "C:/Program Files")) / "LibreOffice/program/soffice.exe",
+    Path(os.getenv("ProgramFiles(x86)", "C:/Program Files (x86)")) / "LibreOffice/program/soffice.exe",
+    Path("/Applications/LibreOffice.app/Contents/MacOS/soffice"),
+]
+SOFFICE_BIN = os.getenv("SOFFICE_BIN") or shutil.which("soffice") or next(
+    (str(path) for path in _soffice_candidates if path.is_file()), "soffice"
+)
 WORKER_HEARTBEAT_MAX_AGE_SECONDS = 30
 DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
+
+# Public access uses the same policy for login and account maintenance.
+PUBLIC_ACCESS = os.getenv("PUBLIC_ACCESS", "0") == "1"
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 12}},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
+AUTHENTICATION_BACKENDS = ["budgeting.auth_security.PublicModelBackend"]
+MIDDLEWARE.insert(0, "budgeting.auth_security.LoginRateLimitMiddleware")
+LOGIN_RATE_LIMIT_PATH = Path(os.getenv("LOGIN_RATE_LIMIT_PATH", Path(DATABASES["default"]["NAME"]).parent / "login-rate-limit.sqlite3"))

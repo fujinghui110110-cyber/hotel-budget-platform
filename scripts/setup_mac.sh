@@ -12,4 +12,5 @@ if ! command -v soffice >/dev/null 2>&1 && [ ! -x /Applications/LibreOffice.app/
     echo "还需要安装 LibreOffice，或在 .env 中设置 SOFFICE_BIN。"
     exit 1
 fi
-echo "依赖已准备好。双击 启动预算统筹系统.command 即可启动。"
+.venv/bin/python scripts/setup_local.py
+echo "首次安装已完成。双击 一键启动.command 即可启动。"

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from budgeting.services.project_scope import cycle_projects
 
 import csv
 import io
@@ -13,6 +14,7 @@ from django.db.models import OuterRef, Q, Subquery
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from budgeting.services.validation_reads import current_validation_issues
 
 from budgeting.models import (
     AdjustmentLine,
@@ -32,6 +34,7 @@ from budgeting.services.trends import (
     KIND_LABELS,
     aggregate_metric,
     approved_current_uploads,
+    latest_report_uploads,
     build_trend,
     build_drilldown,
     export_payload,
@@ -159,8 +162,8 @@ def _selected_project_id(request, cycle):
         return None
     if not project_id or not cycle:
         return None
-    approved_ids = {pc.project_id for pc in approved_current_uploads(cycle)}
-    return project_id if project_id in approved_ids else None
+    available_ids = {pc.project_id for pc in latest_report_uploads(cycle)}
+    return project_id if project_id in available_ids else None
 
 
 def _metric_spec(metric_code, report_code):
@@ -280,7 +283,7 @@ def _kpis(cycle, report_code):
     rows = []
     for code in DEFAULT_METRICS:
         metric = METRICS.get(code, {})
-        bucket = aggregate_metric(cycle, code, report_code, cycle.budget_year if cycle else 0, "BUDGET", None) if cycle else {"value": None, "included_projects": 0}
+        bucket = aggregate_metric(cycle, code, report_code, cycle.budget_year if cycle else 0, "BUDGET", None, data_scope="latest") if cycle else {"value": None, "included_projects": 0}
         rows.append({
             "code": code,
             "label": metric.get("label", code),
@@ -300,16 +303,16 @@ def management_dashboard(request):
     cycle = _cycle(request)
     report_code = _report(request)
     kpis = _kpis(cycle, report_code)
-    uploads = approved_current_uploads(cycle)
+    uploads = latest_report_uploads(cycle)
     projects = []
     for pc in uploads:
         cells = []
         for kpi in kpis:
-            bucket = aggregate_metric(cycle, kpi["code"], report_code, cycle.budget_year, "BUDGET", None, pc.project_id)
+            bucket = aggregate_metric(cycle, kpi["code"], report_code, cycle.budget_year, "BUDGET", None, pc.project_id, data_scope="latest")
             cells.append(_display_value(bucket.get("value"), kpi["unit"], "yuan", kpi["code"], METRICS[kpi["code"]].get("aggregation")))
         projects.append({"project": pc.project, "cells": cells})
-    trend = build_trend(cycle, "revenue_total", report_code) if cycle else {}
-    project_cycles = ProjectCycle.objects.filter(cycle=cycle, project__is_active=True)
+    trend = build_trend(cycle, "revenue_total", report_code, data_scope="latest") if cycle else {}
+    project_cycles = ProjectCycle.objects.filter(cycle=cycle, project_id__in=cycle_projects(cycle).values("pk"))
     latest_ids = project_cycles.annotate(latest_id=Subquery(
         UploadVersion.objects.filter(cycle=cycle, project_id=OuterRef("project_id"))
         .order_by("-created_at", "-pk").values("pk")[:1]
@@ -319,7 +322,7 @@ def management_dashboard(request):
     )
     management_tasks = {
         "submitted_projects": UploadVersion.objects.filter(pk__in=latest_ids, status="SUBMITTED").count(),
-        "validation_projects": ValidationIssue.objects.filter(
+        "validation_projects": current_validation_issues().filter(
             Q(severity="P0") | Q(severity="P1", acknowledged=False),
             run__upload_id__in=latest_ids,
         ).values("run__upload__project_id").distinct().count(),
@@ -354,10 +357,10 @@ def management_trend(request):
     metric = _metric_spec(metric_code, report_code)
     selected_project_id = _selected_project_id(request, cycle)
     display_unit = _display_unit(request, metric_code, report_code)
-    trend = build_trend(cycle, metric_code, report_code, project_id=selected_project_id, display_unit=display_unit) if cycle else {}
+    trend = build_trend(cycle, metric_code, report_code, project_id=selected_project_id, display_unit=display_unit, data_scope="latest") if cycle else {}
     project_choices = [
         {"id": pc.project_id, "code": pc.project.code, "name": pc.project.name}
-        for pc in approved_current_uploads(cycle)
+        for pc in latest_report_uploads(cycle)
     ] if cycle else []
     amount_metric = metric.get("unit") == "MONEY" and (metric.get("aggregation") or "").upper() != "DERIVED"
     return render(request, "budgeting/cockpit_trend.html", {
@@ -389,7 +392,7 @@ def cockpit_trend_data(request):
     display_unit = _display_unit(request, metric_code, report_code)
     if not cycle:
         return JsonResponse({"metric": metric_code, "report_code": report_code, "series": [], "annual": [], "coverage": {"included": 0, "active": 0}})
-    return JsonResponse(build_trend(cycle, metric_code, report_code, project_id=project_id, display_unit=display_unit))
+    return JsonResponse(build_trend(cycle, metric_code, report_code, project_id=project_id, display_unit=display_unit, data_scope="latest"))
 
 
 @admin_required
@@ -399,7 +402,7 @@ def cockpit_export(request):
     metric_code = _metric(request, report_code)
     project_id = _selected_project_id(request, cycle)
     display_unit = _display_unit(request, metric_code, report_code)
-    payload = build_trend(cycle, metric_code, report_code, project_id=project_id, display_unit=display_unit) if cycle else {}
+    payload = build_trend(cycle, metric_code, report_code, project_id=project_id, display_unit=display_unit, data_scope="latest") if cycle else {}
     if request.GET.get("format", "csv").lower() == "json":
         return JsonResponse(export_payload(payload))
     stream = io.StringIO(newline="")
@@ -415,12 +418,12 @@ def cockpit_export(request):
 def cockpit_project(request, project_id):
     cycle = _cycle(request)
     project = get_object_or_404(Project, pk=project_id)
-    pc = next((item for item in approved_current_uploads(cycle, project_id=project.id)), None) if cycle else None
+    pc = next((item for item in latest_report_uploads(cycle, project_id=project.id)), None) if cycle else None
     metrics = []
     if cycle and pc:
         for code, metric in METRICS.items():
             if any(item["row_code"] for item in metric_choices(_report(request)) if item["code"] == code):
-                metrics.append({"code": code, "label": metric.get("label", code), "trend": build_trend(cycle, code, _report(request), project_id=project.id)})
+                metrics.append({"code": code, "label": metric.get("label", code), "trend": build_trend(cycle, code, _report(request), project_id=project.id, data_scope="latest")})
     return render(request, "budgeting/cockpit_project.html", {"cycle": cycle, "project": project, "project_cycle": pc, "metrics": metrics, "report_code": _report(request)})
 
 
@@ -432,7 +435,7 @@ def cockpit_drilldown(request):
     project_filter = _selected_project_id(request, cycle)
     display_unit = _display_unit(request, metric_code, report_code)
     year, kind, month = _drilldown_dimension(request, cycle)
-    payload = build_drilldown(cycle, metric_code, report_code, year=year, kind=kind, month=month, project_id=project_filter, display_unit=display_unit)
+    payload = build_drilldown(cycle, metric_code, report_code, year=year, kind=kind, month=month, project_id=project_filter, display_unit=display_unit, data_scope="latest")
     payload["cycle"] = cycle.id if cycle else None
     payload["rows"] = payload.get("projects", [])
     if request.GET.get("format", "").lower() == "json":
@@ -507,7 +510,7 @@ def cockpit_question(request, question_id=None):
         context = None
         if request.GET.get("value_id"):
             value = _current_value(value_id=request.GET.get("value_id"))
-            if value:
+            if value and (_admin(request.user) or value.upload.project_id == request.user.project_id):
                 initial = {"value_id": value.pk, "upload_id": str(value.upload_id), "report_code": value.report_code, "row_code": value.row_code, "period": value.period}
                 context = _question_context(value)
         question_context = _question_snapshot_context(question) if question else context

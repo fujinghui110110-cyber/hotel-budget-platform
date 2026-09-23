@@ -2,10 +2,13 @@ import time
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.db import OperationalError, connection
 from django.db.models import F
 from django.utils import timezone
 
 from budgeting.models import ProcessingJob, UploadVersion
+from budgeting.services.processing_runs import ensure_job_run, mark_run_failed, mark_run_running
 from budgeting.services.workflow import InfrastructureProcessingError, process_upload
 
 
@@ -18,16 +21,41 @@ class Command(BaseCommand):
         parser.add_argument("--lease-seconds", type=int, default=240)
 
     def handle(self, *args, **options):
-        while True:
-            job = self._claim_job(options["lease_seconds"])
-            if job:
-                self._run_job(job)
-            elif options["once"]:
-                return
-            else:
-                time.sleep(options["sleep"])
+        import os
+        from pathlib import Path
+        from budgeting.services.worker_heartbeat import WorkerHeartbeat
+        runtime = Path(os.getenv("BUDGET_RUNTIME_ROOT", settings.BASE_DIR / ".runtime"))
+        with WorkerHeartbeat() as heartbeat:
+            while True:
+                if (runtime / 'update-maintenance').exists():
+                    if options["once"]:
+                        break
+                    time.sleep(options["sleep"])
+                    continue
+                job = self._claim_job(options["lease_seconds"])
+                if job:
+                    heartbeat.state = "PROCESSING"
+                    heartbeat.job_id = job.pk
+                    heartbeat.write()
+                    self._run_job(job)
+                    heartbeat.job_id = None
+                    heartbeat.state = "IDLE"
+                elif options["once"]:
+                    return
+                else:
+                    time.sleep(options["sleep"])
+
 
     def _claim_job(self, lease_seconds):
+        for attempt in range(5):
+            try:
+                return self._claim_once(lease_seconds)
+            except OperationalError as exc:
+                if connection.vendor != "sqlite" or "locked" not in str(exc).lower() or attempt == 4:
+                    raise
+                time.sleep(0.02 * (attempt + 1))
+
+    def _claim_once(self, lease_seconds):
         now = timezone.now()
         expired = ProcessingJob.objects.filter(
             status=ProcessingJob.Status.RUNNING,
@@ -54,7 +82,10 @@ class Command(BaseCommand):
         )
         if not claimed:
             return None
-        job.refresh_from_db()
+        job.status = ProcessingJob.Status.RUNNING
+        job.attempts += 1
+        job.lease_until = now + timedelta(seconds=lease_seconds)
+        job.heartbeat_at = now
         return job
 
     def _run_job(self, job):
@@ -65,6 +96,7 @@ class Command(BaseCommand):
         upload.status = UploadVersion.Status.PROCESSING
         upload.save(update_fields=["status"])
         try:
+            ensure_job_run(job)
             process_upload(upload)
         except InfrastructureProcessingError as exc:
             if job.attempts < 2:
@@ -74,15 +106,22 @@ class Command(BaseCommand):
                 upload.status = UploadVersion.Status.REJECTED
                 upload.note = str(exc)
                 upload.save(update_fields=["status", "note"])
+                mark_run_failed(job.processing_run, str(exc))
                 job.status = ProcessingJob.Status.FAILED
                 job.error = str(exc)
         except Exception as exc:
             upload.status = UploadVersion.Status.REJECTED
             upload.note = str(exc)
             upload.save(update_fields=["status", "note"])
+            mark_run_failed(job.processing_run, str(exc))
             job.status = ProcessingJob.Status.FAILED
             job.error = str(exc)
         else:
+            from budgeting.services.data_read_audit import build_upload_audit
+            try:
+                build_upload_audit(upload)
+            except Exception as exc:
+                self.stderr.write(f"数据读取审计暂不可用（{type(exc).__name__}），查看审计页面时将重试。")
             job.status = ProcessingJob.Status.DONE
             job.error = ""
         job.lease_until = None

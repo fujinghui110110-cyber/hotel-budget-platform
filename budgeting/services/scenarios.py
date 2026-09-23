@@ -22,6 +22,8 @@ from budgeting.models import (
     UploadVersion,
 )
 from budgeting.services.allocations import largest_remainder
+from budgeting.services.pnl_graph import CROSS_REF, _eval, _topo_order, build_report_graph, load_external_values, parse_formula
+from budgeting.services.template_paths import resolve_template_path
 
 try:
     from budgeting.services.metrics import METRICS, REPORT_CODES
@@ -87,7 +89,7 @@ def _profit_rules(report_code):
 
 def _profit_output_targets(report_code):
     if str(report_code).startswith("PL_ZZ"):
-        return {"total": 15, "gop": 64, "operating": 113, "npi": 129, "final": 127}
+        return {"total": 15, "gop": 101, "operating": 113, "npi": 129, "final": 127}
     return {"total": 32, "gop": 80, "operating": 90, "npi": 105, "final": 101}
 
 
@@ -212,8 +214,7 @@ def _fallback_unit(key):
 def _manifest_path(template):
     if not template or not getattr(template, "manifest_path", ""):
         return None
-    path = Path(template.manifest_path)
-    return path if path.is_absolute() else Path(settings.BASE_DIR) / path
+    return resolve_template_path(template.manifest_path)
 
 
 @lru_cache(maxsize=8)
@@ -242,6 +243,28 @@ def _manifest_rows(upload):
     return result
 
 
+def _template_manifest(upload=None):
+    path = _manifest_path(getattr(upload, "template", None)) if upload is not None else None
+    if path:
+        manifest = _read_manifest(str(path))
+        if manifest:
+            return manifest
+    fallback = Path(settings.BASE_DIR) / "artifacts" / "template_manifest.json"
+    return _read_manifest(str(fallback))
+
+
+def _formula_graphs(manifest):
+    graphs = {}
+    if not manifest:
+        return graphs
+    for report_code in REPORT_CODES:
+        try:
+            graphs[report_code] = build_report_graph(manifest, report_code)
+        except ValueError:
+            continue
+    return graphs
+
+
 def _upload_tables(upload):
     tables = {code: OrderedDict() for code in REPORT_CODES}
     metadata = _manifest_rows(upload)
@@ -254,9 +277,6 @@ def _upload_tables(upload):
             "unit": str(value.unit), "before": OrderedDict(),
         })
         row["before"][_period(value.period)] = _cell(value.value_int, str(value.unit), ratio_num=value.ratio_num, ratio_den=value.ratio_den)
-    for report_code, rows in tables.items():
-        for row_code, meta in metadata.get(report_code, {}).items():
-            rows.setdefault(row_code, {"label": meta["label"], "unit": meta["unit"], "before": OrderedDict()})
     return tables
 
 
@@ -587,7 +607,65 @@ def _changed_month_codes(rows):
     return changed
 
 
-def _apply_profit_rules(rows, report_code):
+def _formula_value(rows, num_to_code, row_number, month):
+    row_code = num_to_code.get(row_number)
+    row = rows.get(row_code)
+    if not row:
+        raise ScenarioError(f"UNVERIFIED公式来源缺失：R{row_number:04d}")
+    cell = (row.get("after") or {}).get(month)
+    if cell is None:
+        cell = (row.get("before") or {}).get(month)
+    if cell is None:
+        raise ScenarioError(f"UNVERIFIED公式来源缺失：{row_code}:{month}")
+    return _numeric(cell)
+
+
+def _formula_range(rows, num_to_code, c1, r1, c2, r2, month):
+    if c1 != c2:
+        raise ScenarioError(f"UNVERIFIED公式区间未确认：{c1}{r1}:{c2}{r2}")
+    return [_formula_value(rows, num_to_code, row_number, month) for row_number in range(r1, r2 + 1)]
+
+
+def _apply_template_formulas(rows, report_code, formula_graph=None, upload=None):
+    if not formula_graph:
+        return set()
+    graph, num_to_code = formula_graph
+    changed_codes = _changed_month_codes(rows)
+    computed = set()
+    for row_code in _topo_order(graph):
+        metadata = graph[row_code]
+        formula = metadata.get("monthly") or ""
+        if not formula or metadata.get("kind") != "derived" or row_code not in rows:
+            continue
+        dependencies = tuple(dep for dep in metadata.get("deps") or () if dep in rows)
+        if len(dependencies) != len(metadata.get("deps") or ()):
+            continue
+        if not dependencies or not any(dep in changed_codes for dep in dependencies):
+            continue
+        external_refs = CROSS_REF.findall(formula)
+        external_values = {}
+        if external_refs:
+            if upload is None:
+                raise ScenarioError(f"UNVERIFIED跨表公式来源：{report_code}:{row_code}")
+            try:
+                external_values = load_external_values(upload, external_refs)
+            except ValueError as exc:
+                raise ScenarioError(f"{report_code}:{row_code}：{exc}") from exc
+        ast = parse_formula(formula)
+        for month in MONTHS:
+            value = _eval(
+                ast,
+                lambda _col, row, month=month: _formula_value(rows, num_to_code, row, month),
+                lambda c1, r1, c2, r2, month=month: _formula_range(rows, num_to_code, c1, r1, c2, r2, month),
+                lambda ref: external_values[ref],
+            )
+            _put_after(rows, row_code, month, value, row_code)
+        computed.add(row_code)
+        changed_codes.add(row_code)
+    return computed
+
+
+def _apply_profit_rules(rows, report_code, formula_graph=None, upload=None):
     rules = _profit_rules(report_code)
     changed_codes = _changed_month_codes(rows)
     computed_codes = set()
@@ -595,20 +673,6 @@ def _apply_profit_rules(rows, report_code):
         target_code = f"R{target:04d}"
         target_row = rows.get(target_code)
         dependency_codes = [f"R{row:04d}" for row, _ in dependencies]
-        if (
-            str(report_code).startswith("PL_ZZ")
-            and target == 111
-            and "R0105" in rows
-            and "R0103" in changed_codes
-        ):
-            fee_row = rows["R0105"]
-            gop_row = rows["R0103"]
-            for month in MONTHS:
-                fee_before = _numeric((fee_row.get("before") or {}).get(month) or _number_cell(0, fee_row.get("unit") or "MONEY"))
-                gop_before = _numeric((gop_row.get("before") or {}).get(month) or _number_cell(0, gop_row.get("unit") or "MONEY"))
-                gop_after = _numeric((gop_row.get("after") or {}).get(month) or _number_cell(0, gop_row.get("unit") or "MONEY"))
-                _put_after(rows, "R0105", month, fee_before + (gop_after - gop_before) * Decimal("0.04"), "R0105")
-            changed_codes.add("R0105")
         if not target_row or str(target_row.get("unit") or "").upper() != "MONEY":
             continue
         if any(code not in rows for code in dependency_codes):
@@ -624,6 +688,10 @@ def _apply_profit_rules(rows, report_code):
         computed_codes.add(target_code)
         changed_codes.add(target_code)
 
+    template_computed = _apply_template_formulas(rows, report_code, formula_graph, upload)
+    computed_codes.update(template_computed)
+    changed_codes.update(template_computed)
+
     row_map = _row_map(report_code)
     for key, target in _profit_output_targets(report_code).items():
         output_code = row_map.get(key)
@@ -634,11 +702,12 @@ def _apply_profit_rules(rows, report_code):
             continue
         if not output_row or str(output_row.get("unit") or "").upper() != "MONEY":
             continue
+        copy_target = str(report_code).startswith("PL_ZZ") and key == "gop"
         for month in MONTHS:
             target_before = _numeric((target_row.get("before") or {}).get(month) or _number_cell(0, target_row.get("unit") or "MONEY"))
             target_after = _numeric((target_row.get("after") or {}).get(month) or _number_cell(0, target_row.get("unit") or "MONEY"))
             output_before = _numeric((output_row.get("before") or {}).get(month) or _number_cell(0, output_row.get("unit") or "MONEY"))
-            _put_after(rows, output_code, month, output_before + target_after - target_before, key)
+            _put_after(rows, output_code, month, target_after if copy_target else output_before + target_after - target_before, key)
         computed_codes.add(output_code)
         changed_codes.add(output_code)
     return computed_codes, changed_codes
@@ -681,7 +750,7 @@ def _recalculate_registered_ratios(rows, report_code, changed_codes):
             _put_ratio(rows, ratio_code, month, _round_int(numerator), _round_int(denominator), ratio_code)
 
 
-def _report_rows(tables, report_code, inputs, year):
+def _report_rows(tables, report_code, inputs, year, formula_graph=None, upload=None):
     rows = deepcopy(tables.get(report_code) or {})
     row_map = _row_map(report_code)
     cost_mode = inputs.get("cost_mode", "fixed")
@@ -706,7 +775,7 @@ def _report_rows(tables, report_code, inputs, year):
             _put_after(rows, row_map["sold"], month, state["sold_after"], "sold")
     if cost_mode == "proportional":
         _apply_proportional_room_costs(rows, report_code, states, proportional_cost_rows)
-    _apply_profit_rules(rows, report_code)
+    _apply_profit_rules(rows, report_code, formula_graph=formula_graph, upload=upload)
     if cost_mode == "fixed":
         _apply_profit_fallback(rows, report_code, states)
     _recalculate_registered_ratios(rows, report_code, _changed_month_codes(rows))
@@ -802,7 +871,7 @@ def _report_result(rows, report_code, states):
             "changed_source_values": changes}, changes
 
 
-def _calculate_tables(tables, inputs, year):
+def _calculate_tables(tables, inputs, year, *, formula_graphs=None, upload=None):
     _validate_source(tables)
     _month_target(inputs, _baseline_monthly(tables, REPORT_CODES[0], "room_rev"))
     reports, changes = OrderedDict(), []
@@ -816,7 +885,14 @@ def _calculate_tables(tables, inputs, year):
         if inputs.get("cost_mode", "fixed") == "proportional":
             cost_linkage[report_code] = {"room_revenue_row": _row_map(report_code).get("room_rev"),
                                          "cost_rows": list(_validate_proportional_source(tables, report_code))}
-        rows, states = _report_rows(tables, report_code, inputs, year)
+        rows, states = _report_rows(
+            tables,
+            report_code,
+            inputs,
+            year,
+            formula_graph=(formula_graphs or {}).get(report_code),
+            upload=upload,
+        )
         report_result, report_changes = _report_result(_annual_after(rows, report_code, states), report_code, states)
         reports[report_code] = report_result
         changes.extend(report_changes)
@@ -845,9 +921,13 @@ def _calculate_tables(tables, inputs, year):
 def calculate_fixed_cost_scenario(baseline, inputs, *, budget_year=None):
     if isinstance(baseline, UploadVersion):
         tables, year = _upload_tables(baseline), int(budget_year or baseline.cycle.budget_year)
+        manifest = _template_manifest(baseline)
+        upload = baseline
     else:
         tables, year = _mapping_tables(baseline), int(budget_year or 2026)
-    return _calculate_tables(tables, _normalise_inputs(inputs), year)
+        manifest = _template_manifest()
+        upload = None
+    return _calculate_tables(tables, _normalise_inputs(inputs), year, formula_graphs=_formula_graphs(manifest), upload=upload)
 
 
 def build_scenario_result(baseline, inputs, *, budget_year=None):
@@ -1068,7 +1148,7 @@ def issue_scenario(scenario, actor=None):
         editable_codes_by_report = {
             report_code: {
                 row_code
-                for row_code, row in _project_report(baseline.project, cycle, report_code)[0].items()
+                for row_code, row in _project_report(baseline.project, cycle, report_code, upload=baseline)[0].items()
                 if row.get("kind") == "leaf"
             }
             for report_code in REPORT_CODES
@@ -1094,6 +1174,7 @@ def issue_scenario(scenario, actor=None):
                 actor=actor,
                 due_date=None,
                 batch=batch,
+                upload=baseline,
             )
             posted_report = ((batch.cascade or {}).get("reports") or {}).get(report_code)
             if cost_mode == "proportional":

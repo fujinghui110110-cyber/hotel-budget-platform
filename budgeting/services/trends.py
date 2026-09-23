@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from django.db.models import F
+from budgeting.services.project_scope import cycle_projects
 from decimal import Decimal, ROUND_HALF_UP
 
 from budgeting.models import NormalizedValue, Project, ProjectCycle, UploadVersion
@@ -24,7 +26,8 @@ def approved_current_uploads(cycle, project_id=None):
             cycle=cycle,
             current_upload__cycle=cycle,
             current_upload__status=UploadVersion.Status.APPROVED,
-            project__is_active=True,
+            project_id__in=cycle_projects(cycle).values("pk"),
+            current_upload__project_id=F("project_id"),
         )
         .select_related("project", "current_upload")
         .order_by("project__code")
@@ -32,6 +35,24 @@ def approved_current_uploads(cycle, project_id=None):
     if project_id:
         qs = qs.filter(project_id=project_id)
     return list(qs)
+
+
+def latest_report_uploads(cycle, project_id=None):
+    from types import SimpleNamespace
+    from budgeting.services.budget_versions import selected_project_upload
+
+    if not cycle:
+        return []
+    projects = cycle_projects(cycle)
+    if project_id:
+        projects = projects.filter(pk=project_id)
+    result = []
+    for project in projects:
+        upload = selected_project_upload(project, cycle)
+        if upload:
+            result.append(SimpleNamespace(project=project, project_id=project.pk,
+                                          current_upload=upload, current_upload_id=upload.pk))
+    return result
 
 
 def _dimension(value):
@@ -262,13 +283,13 @@ def _aggregate(uploads, rows_by_upload, metric, report_code, dimension):
     return {"value": resolved, "value_int": resolved, "ratio_num": None, "ratio_den": None, "included_projects": len(project_ids), "project_ids": project_ids}
 
 
-def aggregate_metric(cycle, metric_code, report_code="PL_TOTAL_WINE", year=None, kind=None, month=None, project_id=None):
+def aggregate_metric(cycle, metric_code, report_code="PL_TOTAL_WINE", year=None, kind=None, month=None, project_id=None, data_scope="approved"):
     metric = _metric_for(metric_code, report_code)
     if not cycle:
         return {"value": None, "value_int": None, "ratio_num": None, "ratio_den": None, "included_projects": 0, "project_ids": [], "year": year, "kind": kind, "month": month, "unit": metric.get("unit"), "metric": metric_code, "report_code": report_code}
     year = int(year or cycle.budget_year)
     kind = (kind or "BUDGET").upper()
-    uploads = approved_current_uploads(cycle, project_id=project_id)
+    uploads = (latest_report_uploads if data_scope == "latest" else approved_current_uploads)(cycle, project_id=project_id)
     rows_by_upload = _load_rows(uploads, metric, report_code)
     result = _aggregate(uploads, rows_by_upload, metric, report_code, (year, kind, month))
     result.update({"year": year, "kind": kind, "month": month, "unit": metric.get("unit"), "metric": metric_code, "report_code": report_code})
@@ -286,21 +307,21 @@ def _load_rows(uploads, metric, report_code):
             codes.add(code)
     if not codes:
         return {}
-    rows = NormalizedValue.objects.filter(upload_id__in=upload_ids, report_code=report_code, row_code__in=codes).select_related("upload__cycle")
+    rows = NormalizedValue.objects.filter(upload_id__in=upload_ids, report_code=report_code, row_code__in=codes).select_related("upload__cycle", "history_import")
     grouped = defaultdict(list)
     for row in rows:
         grouped[row.upload_id].append(row)
     return grouped
 
 
-def build_trend(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WINE", project_id=None, display_unit=None):
+def build_trend(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WINE", project_id=None, display_unit=None, data_scope="approved"):
     metric = _metric_for(metric_code, report_code)
     display_unit = normalize_display_unit(metric, display_unit)
-    uploads = approved_current_uploads(cycle, project_id=project_id)
+    uploads = (latest_report_uploads if data_scope == "latest" else approved_current_uploads)(cycle, project_id=project_id)
     rows_by_upload = _load_rows(uploads, metric, report_code)
-    active_count = Project.objects.filter(is_active=True).count()
+    active_count = cycle_projects(cycle).count()
     if project_id:
-        active_count = Project.objects.filter(pk=project_id, is_active=True).count()
+        active_count = cycle_projects(cycle).filter(pk=project_id).count()
     periods = rolling_years(cycle.budget_year) if cycle else []
     series = []
     annual = []
@@ -403,12 +424,13 @@ def _source_detail(row):
         "source_cell": row.source_cell,
         "source_formula": row.source_formula or "",
         "upload_id": str(row.upload_id),
-        "upload_name": row.upload.original_name or row.upload.original_path,
+        "upload_name": row.history_import.original_name if row.history_import_id else (row.upload.original_name or row.upload.original_path),
+        "history_import_id": str(row.history_import_id) if row.history_import_id else None,
         "upload_created_at": row.upload.created_at.isoformat() if row.upload.created_at else None,
     }
 
 
-def build_drilldown(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WINE", year=None, kind=None, month=None, project_id=None, display_unit=None):
+def build_drilldown(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WINE", year=None, kind=None, month=None, project_id=None, display_unit=None, data_scope="approved"):
     metric = _metric_for(metric_code, report_code)
     display_unit = normalize_display_unit(metric, display_unit)
     if not cycle:
@@ -419,7 +441,7 @@ def build_drilldown(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WI
     if month is not None and not 1 <= month <= 12:
         month = None
     dimension = (year, kind, month)
-    uploads = approved_current_uploads(cycle, project_id=project_id)
+    uploads = (latest_report_uploads if data_scope == "latest" else approved_current_uploads)(cycle, project_id=project_id)
     rows_by_upload = _load_rows(uploads, metric, report_code)
     codes = set(_detail_source_codes(metric, report_code))
     projects = []
@@ -440,7 +462,7 @@ def build_drilldown(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WI
             "project_code": pc.project.code,
             "project_name": pc.project.name,
             "upload_id": str(pc.current_upload_id),
-            "upload_name": pc.current_upload.original_name or pc.current_upload.original_path,
+            "upload_name": (source_rows[0].history_import.original_name if source_rows and source_rows[0].history_import_id else (pc.current_upload.original_name or pc.current_upload.original_path)),
             "upload_created_at": pc.current_upload.created_at.isoformat() if pc.current_upload.created_at else None,
             "value": value,
             "value_raw": _exact_value(value),
@@ -454,9 +476,9 @@ def build_drilldown(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WI
             "sources": [_source_detail(row) for row in source_rows],
         })
     included = sum(1 for item in projects if item["included"])
-    active_count = Project.objects.filter(is_active=True).count()
+    active_count = cycle_projects(cycle).count()
     if project_id:
-        active_count = Project.objects.filter(pk=project_id, is_active=True).count()
+        active_count = cycle_projects(cycle).filter(pk=project_id).count()
     return {
         "metric": metric_code,
         "metric_label": metric.get("label", metric_code),
@@ -492,7 +514,7 @@ def _rollup_months(monthly, metric):
     return {"value": value, "value_int": value, "ratio_num": None, "ratio_den": None, "included_projects": len(included), "project_ids": list(included)}
 
 
-def trend_payload(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WINE", project_id=None, display_unit=None):
+def trend_payload(cycle, metric_code="revenue_total", report_code="PL_TOTAL_WINE", project_id=None, display_unit=None, data_scope="approved"):
     return build_trend(cycle, metric_code, report_code, project_id, display_unit)
 
 

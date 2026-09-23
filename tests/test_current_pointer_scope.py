@@ -118,8 +118,9 @@ class CurrentPointerScopeTests(TestCase):
         self.assertEqual(_dashboard_data(self.cycle_a, self.report_code), ([], []))
 
         report, drilldown = self._report_context()
-        self.assertEqual(report.context["values"], {})
-        self.assertEqual(drilldown.context["contributions"], [])
+        self.assertEqual(report.context["values"], {(self.row_code, "01"): 900})
+        self.assertEqual([item["project"] for item in drilldown.context["contributions"]], [self.project_b.code])
+        self.assertNotIn(self.project_a.code, [item["project"] for item in drilldown.context["contributions"]])
 
     def test_matching_active_pointer_is_included(self):
         upload = self._upload(self.project_a, self.cycle_a, value_int=123)

@@ -3,7 +3,7 @@
 {% block breadcrumb %}<span>管理端 / 真实项目原表</span>{% endblock %}
 {% block content %}
 <section class="page-heading"><p class="eyebrow">历史来源 · 只读</p><h1>真实项目原表</h1><p>已接入 {{ workbooks|length }} 家酒店，{{ total_sheets }} 张工作表。选择项目后可查看完整分表目录。</p></section>
-<section class="panel"><h2>数据使用说明</h2><p>这里展示您提供的原始套表及其保存时的数值缓存，不代表服务端重算或已批准预算。缺数保留为空，Excel 错误保留原样；不运行宏、不访问外部链接。六项经费等缺失依赖待补充。</p><a class="text-link" href="{% url 'report_catalog' %}">查看已批准预算的公司汇总与项目分表 →</a></section>
+<section class="panel"><h2>数据使用说明</h2><p>这里展示原始套表保存时的数据，供核对来源，不代表已批准预算。未填数据和 Excel 错误按原样显示；文件中的宏与外部链接不会运行。</p><a class="text-link" href="{% url 'report_catalog' %}">查看已批准预算的公司汇总与项目分表 →</a></section>
 {% for book in workbooks %}
 <section class="panel" id="{{ book.id }}"><div class="section-heading"><div><p class="eyebrow">{{ book.id }} · {{ book.sheet_count }} 张工作表</p><h2>{{ book.name }}</h2></div><span class="badge">原始数据 · 未批准</span></div><p>{{ book.source_name }}</p><details><summary>文件校验与来源</summary><p>SHA-256：<code>{{ book.sha256 }}</code></p></details>
 <div class="table-scroll"><table class="report-table"><thead><tr><th>工作表名称</th><th>业务行数</th><th>业务列数</th><th>查看</th></tr></thead><tbody>{% for item in book.sheets %}<tr><th>{{ item.name }}</th><td>{{ item.row_count }}</td><td>{{ item.col_count }}</td><td><a class="text-link" href="{% url 'reference_sheet' book.id item.id %}">打开分表</a></td></tr>{% endfor %}</tbody></table></div></section>
