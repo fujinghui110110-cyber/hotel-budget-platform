@@ -43,12 +43,21 @@ class SystemUpdateTests(SimpleTestCase):
     def test_release_only_accepts_verified_stable_asset(self):
         release = {'tag_name': 'v2026.09.11.2', 'body': '新版本', 'assets': [
             {'name': update.ASSET_NAME, 'id': 1, 'size': 20, 'digest': 'sha256:' + 'a' * 64}]}
-        with mock.patch.object(update, 'github_open', return_value=io.BytesIO(json.dumps(release).encode())):
+        with mock.patch.object(update, 'github_open', return_value=io.BytesIO(json.dumps([release]).encode())):
             self.assertTrue(update.check()['update_available'])
         release['prerelease'] = True
-        with mock.patch.object(update, 'github_open', return_value=io.BytesIO(json.dumps(release).encode())):
+        with mock.patch.object(update, 'github_open', return_value=io.BytesIO(json.dumps([release]).encode())):
             with self.assertRaises(ValueError):
                 update.check()
+
+    def test_modern_client_ignores_latest_bridge_and_prereleases(self):
+        def release(version, **extra):
+            return {'tag_name': 'v' + version, 'assets': [{'name': update.ASSET_NAME, 'id': 1, 'size': 20, 'digest': 'sha256:' + 'a' * 64}], **extra}
+        releases = [release('2026.09.23.0'), release('2026.09.24.1', prerelease=True),
+                    release('2026.09.25.1', draft=True), release('2026.09.23.1')]
+        with mock.patch.object(update, 'github_open', return_value=io.BytesIO(json.dumps(releases).encode())) as request:
+            self.assertEqual(update.check()['available_version'], '2026.09.23.1')
+            self.assertTrue(request.call_args.args[0].endswith('/releases?per_page=100'))
 
     def test_archive_rejects_data_paths_and_traversal(self):
         for path in ('../db.sqlite3', 'storage/budget.xlsx', '.env', 'scripts/../../x', 'scripts\\x.py'):

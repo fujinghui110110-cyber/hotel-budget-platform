@@ -66,7 +66,11 @@ def verify_attestation(archive, manifest, token=None):
         raise ReleaseError('本机登记不能作为远程升级来源。')
     gh = shutil.which('gh')
     if not gh:
-        raise ReleaseError('需要 GitHub CLI 验证发布证明，未安装时禁止升级。')
+        from scripts.github_cli import ensure_github_cli
+        try:
+            gh = ensure_github_cli()
+        except (OSError, ValueError) as exc:
+            raise ReleaseError('无法准备更新验证工具，请检查网络后重试。') from exc
     verification_env = os.environ.copy()
     if token:
         verification_env['GH_TOKEN'] = token

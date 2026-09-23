@@ -24,6 +24,8 @@ except ImportError:
     from runtime_support import FileLock, detached_popen_kwargs, process_identity, identity_matches, process_matches, stop_process_tree, stop_identities
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 REPOSITORY = 'fujinghui110110-cyber/hotel-budget-platform'
 API = 'https://api.github.com/repos/' + REPOSITORY
 ASSET_NAME = 'budget-system-update.zip'
@@ -154,8 +156,19 @@ def check():
     with FileLock(runtime('update.lock')):
         if status()['busy']:
             raise UpdateError('正在更新，请稍后检查。')
-        with github_open(API + '/releases/latest') as response:
-            release = json.loads(response.read(2 * 1024 * 1024))
+        # The legacy bridge remains GitHub's latest release for schema-1 clients.
+        # Modern clients choose the highest stable version, not the latest flag.
+        with github_open(API + '/releases?per_page=100') as response:
+            releases = json.loads(response.read(2 * 1024 * 1024))
+        if not isinstance(releases, list):
+            raise UpdateError('发布列表格式不正确，请稍后重试。')
+        candidates = [item for item in releases if isinstance(item, dict)
+                      and not item.get('draft') and not item.get('prerelease')
+                      and re.fullmatch(r'v?\d{4}\.\d{2}\.\d{2}\.\d+', item.get('tag_name', ''))
+                      and any(asset.get('name') == ASSET_NAME for asset in item.get('assets', []))]
+        if not candidates:
+            raise UpdateError('暂无可安装的正式版本。')
+        release = max(candidates, key=lambda item: version_key(item['tag_name'].removeprefix('v')))
         version = release.get('tag_name', '').removeprefix('v')
         version_key(version)
         asset = next((item for item in release.get('assets', []) if item.get('name') == ASSET_NAME), None)

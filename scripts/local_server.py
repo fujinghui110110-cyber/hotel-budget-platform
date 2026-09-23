@@ -197,26 +197,9 @@ def worker_status():
 
 
 def dispatch_active_release():
-    install_root = Path(os.getenv("BUDGET_INSTALL_ROOT", ROOT)).resolve()
-    pointer = install_root / "active-release.json"
-    if not pointer.exists():
-        return
-    try:
-        state = json.loads(pointer.read_text(encoding="utf-8"))
-        release = Path(state["release_dir"]).resolve()
-        python = Path(os.path.abspath(state["python"]))
-    except (ValueError, KeyError, TypeError) as exc:
-        raise RuntimeError("当前版本指针损坏，未启动其他程序。") from exc
-    launcher = release / "scripts/local_server.py"
-    if state.get("schema") != 1 or release.parent != install_root / "releases":
-        raise RuntimeError("当前版本指针无效，未启动其他程序。")
-    if (release / ".venv").is_symlink() or not python.is_relative_to(release / ".venv") or not python.is_file() or not launcher.is_file():
-        raise RuntimeError("当前版本运行环境不完整，请检查升级记录。")
-    os.environ.setdefault("BUDGET_INSTALL_ROOT", str(install_root))
-    os.environ.setdefault("BUDGET_RUNTIME_ROOT", str(install_root / ".runtime"))
-    os.environ.setdefault("BUDGET_LOG_ROOT", str(install_root / "logs"))
-    if ROOT.resolve() != release or os.path.abspath(sys.executable) != str(python):
-        os.execv(str(python), [str(python), str(launcher), *sys.argv[1:]])
+    sys.path.insert(0, str(ROOT))
+    from scripts.bridge_bootstrap import dispatch_active_release as dispatch
+    dispatch(ROOT)
 
 
 def main():

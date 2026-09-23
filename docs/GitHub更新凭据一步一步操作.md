@@ -13,7 +13,7 @@
 ## 第一步：进入 GitHub 创建页面
 
 1. 在浏览器打开 [GitHub 官网](https://github.com)，登录 `fujinghui110110-cyber`。GitHub 如果要求邮箱验证码或双重验证，请按你自己的账号验证方式完成。
-2. 打开 [本系统凭据创建链接](https://github.com/settings/personal-access-tokens/new?name=Budget-server-update&target_name=fujinghui110110-cyber&expires_in=90&contents=read)。这个链接会预填名称、仓库拥有者、90 天有效期和只读权限，**还需要你手动选择具体仓库**。
+2. 打开 [本系统凭据创建链接](https://github.com/settings/personal-access-tokens/new?name=Budget-server-update&target_name=fujinghui110110-cyber&expires_in=90&contents=read&attestations=read)。这个链接会预填名称、仓库拥有者、90 天有效期和只读权限，**还需要你手动选择具体仓库**。
 3. 如果链接没有进入创建页，也可以手动进入：右上角头像 → **Settings（设置）** → 左侧最下方 **Developer settings（开发者设置）** → **Personal access tokens** → **Fine-grained tokens** → **Generate new token**。
 
 注意使用个人账号 Settings，不是仓库页面内的 Settings；不要选 Tokens (classic)。GitHub 可能要求再次输入 GitHub 密码，这是正常的身份确认。
@@ -81,3 +81,5 @@
 
 - [管理个人访问令牌（GitHub 官方）](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
 - [创建 Fine-grained token](https://github.com/settings/personal-access-tokens/new)
+
+新版在线升级还需把仓库权限中的 **Attestations** 设置为 **Read-only**，用于验证发布证明。原有 Contents 保持 Read-only，不需要写权限。已有凭据可以编辑增加该只读权限，再按 GitHub 提示重新批准。
