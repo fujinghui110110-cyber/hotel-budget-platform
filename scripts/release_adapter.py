@@ -9,6 +9,8 @@ import sqlite3
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 import zipfile
 
 from scripts.release_manager import ReleaseManager, ReleaseError, CAPABILITIES, validate_manifest, compatible, upgrade_compatible, verify_attestation, atomic_json
@@ -71,11 +73,24 @@ def adapters(update, env):
         compatible(json.loads((Path(pointer['release_dir']) / 'manifest.json').read_text()), database_schema(database), CAPABILITIES)
     def healthcheck(pointer):
         execute([pointer['python'], Path(pointer['release_dir']) / 'scripts/local_server.py', 'start', '--port', port], pointer['release_dir'], env, 180)
-        import urllib.request
-        with urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=10) as response:
-            payload = json.loads(response.read(65536))
-            if response.status != 200 or not payload.get('database') or not payload.get('storage'):
-                raise ReleaseError('新版健康检查失败。')
+        deadline = time.monotonic() + 30
+        last_error = None
+        while True:
+            try:
+                with urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=5) as response:
+                    payload = json.loads(response.read(65536))
+                    status = getattr(response, 'status', 200)
+                if (status == 200 and payload.get('database') is True
+                        and payload.get('storage') is True
+                        and payload.get('worker_healthy') is True):
+                    return
+                last_error = ReleaseError('healthz 未同时报告 database、storage 和 worker_healthy。')
+            except (OSError, ValueError, TypeError, AttributeError, urllib.error.URLError) as exc:
+                last_error = exc
+            if time.monotonic() >= deadline:
+                detail = str(last_error) if last_error else '未收到有效 healthz 响应。'
+                raise ReleaseError(f'新版健康检查失败：{detail}') from last_error
+            time.sleep(0.5)
     return quiesce, migrate, healthcheck
 
 
@@ -157,12 +172,19 @@ def apply_update(update):
             quiesce, migrate, healthcheck = adapters(update, env)
             manager.install_release(destination, database=env['DATABASE_PATH'], roots={'storage': storage, 'templates': templates, 'config': config_copy},
                 schema=database_schema(env['DATABASE_PATH']), required_capabilities=CAPABILITIES, quiesce=quiesce, migrate=migrate,
-                reconcile=reconcile_database, healthcheck=healthcheck, verify=lambda: verify_attestation(archive, manifest, token=token))
+                reconcile=reconcile_database, healthcheck=healthcheck,
+                verify=lambda: verify_attestation(archive, manifest, token=token),
+                schema_reader=database_schema)
             update.runtime('update-maintenance').unlink(missing_ok=True)
             update.state('completed', busy=False, error='', message='更新完成，原件、历史模板和旧版本均已保留。')
         except Exception as exc:
             message = str(exc) if isinstance(exc, (ReleaseError, update.UpdateError)) else '更新未完成，请检查升级日志与备份状态。'
-            update.state('recovery_required' if update.runtime('update-maintenance').exists() else 'failed', busy=False, error=message)
+            journal = update.read_json(manager.journal) if manager.journal.exists() else {}
+            recovered = journal.get('phase') == 'ROLLBACK_COMPLETE' and journal.get('recovered') is True
+            if recovered:
+                update.runtime('update-maintenance').unlink(missing_ok=True)
+            state = 'failed' if recovered or not update.runtime('update-maintenance').exists() else 'recovery_required'
+            update.state(state, busy=False, error=message)
 
 
 def rollback(update, version):

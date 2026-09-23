@@ -1,3 +1,4 @@
+from contextlib import closing
 import json
 from pathlib import Path
 import sqlite3
@@ -24,9 +25,10 @@ class ReleaseManagerTests(unittest.TestCase):
         self.data = self.root / 'data'
         self.data.mkdir()
         self.db = self.data / 'db.sqlite3'
-        with sqlite3.connect(self.db) as db:
-            db.execute('CREATE TABLE uploads (id INTEGER PRIMARY KEY, name TEXT)')
-            db.execute("INSERT INTO uploads(name) VALUES ('原件')")
+        with closing(sqlite3.connect(self.db)) as db:
+            with db:
+                db.execute('CREATE TABLE uploads (id INTEGER PRIMARY KEY, name TEXT)')
+                db.execute("INSERT INTO uploads(name) VALUES ('原件')")
         self.roots = {}
         for label in ('storage', 'templates', 'config'):
             folder = self.data / label
@@ -49,12 +51,13 @@ class ReleaseManagerTests(unittest.TestCase):
         return folder
 
     def migrate(self, pointer, database):
-        with sqlite3.connect(database) as db:
-            db.execute('CREATE TABLE IF NOT EXISTS migrations (version TEXT)')
-            db.execute('INSERT INTO migrations VALUES (?)', (pointer['version'],))
+        with closing(sqlite3.connect(database)) as db:
+            with db:
+                db.execute('CREATE TABLE IF NOT EXISTS migrations (version TEXT)')
+                db.execute('INSERT INTO migrations VALUES (?)', (pointer['version'],))
 
     def reconcile(self, before, after):
-        with sqlite3.connect(before) as old, sqlite3.connect(after) as new:
+        with closing(sqlite3.connect(before)) as old, closing(sqlite3.connect(after)) as new:
             self.assertEqual(old.execute('SELECT * FROM uploads').fetchall(), new.execute('SELECT * FROM uploads').fetchall())
 
     def install(self, **kwargs):
@@ -67,11 +70,12 @@ class ReleaseManagerTests(unittest.TestCase):
 
     def test_new_business_writes_survive_compatible_code_rollback(self):
         self.install()
-        with sqlite3.connect(self.db) as db:
-            db.execute("INSERT INTO uploads(name) VALUES ('升级后新上传')")
+        with closing(sqlite3.connect(self.db)) as db:
+            with db:
+                db.execute("INSERT INTO uploads(name) VALUES ('升级后新上传')")
         self.manager.rollback_code(self.old, schema=2, required_capabilities=['locked-history-v1'],
                                    quiesce=lambda: None, healthcheck=lambda pointer: None)
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM uploads').fetchone()[0], 2)
         for label in self.roots:
             self.assertTrue((self.data / 'backups/2026.09.16.2' / label / 'keep.txt').exists())
@@ -104,6 +108,40 @@ class ReleaseManagerTests(unittest.TestCase):
         self.assertEqual(json.loads(self.manager.journal.read_text())['phase'], 'RECOVERY_REQUIRED')
         with self.assertRaises(ReleaseError):
             self.install()
+
+    def test_health_failure_recovers_compatible_prior_code_without_restoring_db(self):
+        health_calls = []
+
+        def health(pointer):
+            health_calls.append(pointer['version'])
+            if pointer['version'] == '2026.09.16.2':
+                raise RuntimeError('candidate is not ready')
+
+        with self.assertRaises(ReleaseError):
+            self.install(schema_reader=lambda database: 2, healthcheck=health)
+        with closing(sqlite3.connect(self.db)) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM uploads').fetchone()[0], 1)
+        self.assertEqual(health_calls, ['2026.09.16.2', '2026.09.16.1'])
+        self.assertEqual(json.loads(self.manager.pointer.read_text())['version'], '2026.09.16.1')
+        journal = json.loads(self.manager.journal.read_text())
+        self.assertEqual(journal['phase'], 'ROLLBACK_COMPLETE')
+        self.assertTrue(journal['recovered'])
+        self.assertEqual(journal['prior']['version'], '2026.09.16.1')
+        self.assertTrue((self.data / 'backups/2026.09.16.2/database.sqlite3').exists())
+
+    def test_health_failure_keeps_maintenance_when_prior_code_is_incompatible(self):
+        def health(pointer):
+            raise RuntimeError('candidate is not ready')
+
+        with self.assertRaises(RuntimeError):
+            self.install(schema_reader=lambda database: 3, healthcheck=health)
+        self.assertEqual(json.loads(self.manager.pointer.read_text())['version'], '2026.09.16.2')
+        journal = json.loads(self.manager.journal.read_text())
+        self.assertEqual(journal['phase'], 'RECOVERY_REQUIRED')
+        self.assertEqual(journal['prior']['version'], '2026.09.16.1')
+        self.assertTrue((self.data / 'backups/2026.09.16.2/database.sqlite3').exists())
+        with closing(sqlite3.connect(self.db)) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM uploads').fetchone()[0], 1)
 
     def test_placeholder_commit_is_rejected(self):
         value = manifest('2026.09.16.2')

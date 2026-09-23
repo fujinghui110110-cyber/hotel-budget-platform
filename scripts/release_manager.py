@@ -79,7 +79,19 @@ def verify_attestation(archive, manifest, token=None):
                              '--source-digest', manifest['commit_sha'], '--deny-self-hosted-runners'],
                             capture_output=True, timeout=120, env=verification_env)
     if result.returncode:
-        raise ReleaseError('GitHub 发布证明验证失败，未安装任何代码。')
+        combined = '\n'.join(
+            part.decode('utf-8', 'replace') if isinstance(part, bytes) else str(part or '')
+            for part in (getattr(result, 'stdout', ''), getattr(result, 'stderr', ''))
+        ).lower()
+        if any(word in combined for word in ('timeout', 'timed out', 'connection', 'network', 'resolve', 'tls', 'proxy')):
+            cause = '请检查网络连接'
+        elif any(word in combined for word in ('401', '403', 'forbidden', 'permission', 'not accessible', 'attestation')):
+            cause = '请检查 GitHub token 权限'
+        else:
+            cause = '请检查网络连接和 GitHub token 权限'
+        raise ReleaseError(
+            f'GitHub 发布证明验证失败；{cause}，并确认 token 具备 Contents: read 与 Attestations: read 权限；未安装任何代码。'
+        )
 
 
 def compatible(manifest, schema, required_capabilities):
@@ -166,6 +178,52 @@ class ReleaseManager:
         return {'schema': 1, 'version': manifest['version'], 'commit_sha': manifest['commit_sha'],
                 'release_dir': str(release), 'python': str(python)}
 
+    def _manifest_for_pointer(self, pointer):
+        if not isinstance(pointer, dict) or not isinstance(pointer.get('release_dir'), str):
+            raise ReleaseError('恢复记录缺少有效的 prior release 指针。')
+        release = Path(pointer['release_dir']).resolve()
+        canonical = self.pointer_for(release)
+        if any(pointer.get(key) != canonical[key] for key in ('version', 'commit_sha', 'release_dir', 'python')):
+            raise ReleaseError('恢复记录中的 prior release 指针与不可变版本不一致。')
+        return read_json(release / 'manifest.json')
+
+    def _recover_compatible_prior(self, *, prior, candidate, database, schema_reader,
+                                  required_capabilities, quiesce, healthcheck, backup):
+        if prior is None or schema_reader is None:
+            return False, '没有 prior 指针或 post-migration schema 校验器。'
+        try:
+            post_schema = schema_reader(database)
+            prior_manifest = self._manifest_for_pointer(prior)
+            compatible(prior_manifest, post_schema, required_capabilities)
+        except Exception as exc:
+            stop_error = None
+            try:
+                quiesce()
+            except Exception as stop_exc:
+                stop_error = type(stop_exc).__name__
+            suffix = f'，候选停止也失败（{stop_error}）' if stop_error else ''
+            return False, f'prior 版本兼容性无法确认（{type(exc).__name__}）{suffix}。'
+
+        try:
+            quiesce()
+            self.phase('RECOVERY_QUIESCE', prior=prior, candidate=candidate, backup=backup,
+                       post_migration_schema=post_schema)
+            atomic_json(self.pointer, prior)
+            self.phase('RECOVERY_ACTIVATE', prior=prior, candidate=candidate, backup=backup)
+            healthcheck(prior)
+        except Exception as exc:
+            stop_error = None
+            try:
+                quiesce()
+            except Exception as stop_exc:
+                stop_error = type(stop_exc).__name__
+            suffix = f'，停止也失败（{stop_error}）' if stop_error else ''
+            return False, f'兼容旧版启动校验失败（{type(exc).__name__}）{suffix}。'
+
+        self.phase('ROLLBACK_COMPLETE', prior=prior, candidate=candidate, backup=backup,
+                   recovered=True, post_migration_schema=post_schema)
+        return True, None
+
     def rollback_code(self, release, *, schema, required_capabilities, quiesce, healthcheck):
         """Never open, restore or replace the business DB during code rollback."""
         if self.journal.exists() and read_json(self.journal).get('phase') not in {'COMPLETE', 'ROLLBACK_COMPLETE'}:
@@ -180,14 +238,33 @@ class ReleaseManager:
         try:
             healthcheck(pointer)
         except Exception:
-            atomic_json(self.pointer, prior)
-            self.phase('ROLLBACK_FAILED')
+            try:
+                prior_manifest = self._manifest_for_pointer(prior)
+                compatible(prior_manifest, schema, required_capabilities)
+            except Exception as exc:
+                self.phase('RECOVERY_REQUIRED', recovery_reason=f'prior 版本不兼容或无法确认（{type(exc).__name__}）。')
+                raise
+            try:
+                quiesce()
+                atomic_json(self.pointer, prior)
+                self.phase('ROLLBACK_RECOVERY_ACTIVATE', prior=prior, candidate=pointer)
+                healthcheck(prior)
+            except Exception as exc:
+                stop_error = None
+                try:
+                    quiesce()
+                except Exception as stop_exc:
+                    stop_error = type(stop_exc).__name__
+                suffix = f'，停止也失败（{stop_error}）' if stop_error else ''
+                self.phase('RECOVERY_REQUIRED', recovery_reason=f'prior 版本启动校验失败（{type(exc).__name__}）{suffix}。')
+                raise
+            self.phase('ROLLBACK_FAILED', prior=prior, candidate=pointer, recovered=True)
             raise
         self.phase('ROLLBACK_COMPLETE')
         return pointer
 
     def install_release(self, release, *, database, roots, schema, required_capabilities,
-                        quiesce, migrate, reconcile, healthcheck, verify):
+                        quiesce, migrate, reconcile, healthcheck, verify, schema_reader=None):
         """Staged release must already have its independent, hash-locked runtime.
 
         Callbacks are platform adapters. verify MUST verify authenticated artifact;
@@ -200,6 +277,7 @@ class ReleaseManager:
         upgrade_compatible(manifest, schema, required_capabilities)
         previous = read_json(self.pointer) if self.pointer.exists() else None
         self.phase('CHECK', prior=previous, candidate=pointer)
+        production_migration_attempted = False
         try:
             verify()
             self.phase('VERIFY')
@@ -214,6 +292,7 @@ class ReleaseManager:
             migrate(pointer, trial)
             reconcile(backup / 'database.sqlite3', trial)
             self.phase('MIGRATE')
+            production_migration_attempted = True
             migrate(pointer, Path(database))
             reconcile(backup / 'database.sqlite3', Path(database))
             self.phase('VALIDATE')
@@ -221,9 +300,18 @@ class ReleaseManager:
             self.phase('ACTIVATE')
             healthcheck(pointer)
             self.phase('COMPLETE')
-        except Exception:
-            # Never restore old DB: writes may have happened or migration may be partial.
-            # Keep maintenance gate closed; explicit recovery checks compatibility.
-            self.phase('RECOVERY_REQUIRED')
+        except Exception as exc:
+            if production_migration_attempted:
+                recovered, reason = self._recover_compatible_prior(
+                    prior=previous, candidate=pointer, database=Path(database),
+                    schema_reader=schema_reader, required_capabilities=required_capabilities,
+                    quiesce=quiesce, healthcheck=healthcheck,
+                    backup=str(self.data / 'backups' / manifest['version']),
+                )
+                if recovered:
+                    raise ReleaseError('新版升级失败，已验证兼容旧版并保留当前业务数据库；本次更新未成功。') from exc
+                self.phase('RECOVERY_REQUIRED', recovery_reason=reason or '未完成兼容恢复。')
+            else:
+                self.phase('RECOVERY_REQUIRED')
             raise
         return pointer
