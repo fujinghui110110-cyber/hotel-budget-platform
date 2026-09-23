@@ -44,6 +44,6 @@ class HostedUploadTests(TestCase):
 
     def test_production_configuration_rejects_shared_default_secret(self):
         env = {**os.environ, "DJANGO_DEBUG": "0", "DJANGO_SECRET_KEY": "local-mvp-change-before-network-deploy", "DJANGO_ALLOWED_HOSTS": "budget.example.com"}
-        result = subprocess.run([sys.executable, "-c", "import config.settings"], cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True)
+        result = subprocess.run([sys.executable, "-c", "import config.settings"], cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True, encoding="utf-8")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("DJANGO_SECRET_KEY", result.stderr)

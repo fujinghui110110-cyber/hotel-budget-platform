@@ -81,14 +81,14 @@ class ReleasePackagingTests(unittest.TestCase):
                        DATABASE_PATH=str(root / 'isolated.sqlite3'),
                        BUDGET_STORAGE_ROOT=str(root / 'storage'))
             checked = subprocess.run([sys.executable, 'manage.py', 'check'],
-                cwd=extracted, env=env, text=True, capture_output=True, timeout=60)
+                cwd=extracted, env=env, text=True, encoding="utf-8", capture_output=True, timeout=60)
             self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
             imported = subprocess.run([sys.executable, '-c',
                 'import config.wsgi; '
                 'assert config.wsgi.application'], cwd=extracted, env=env,
-                text=True, capture_output=True, timeout=60)
+                text=True, encoding="utf-8", capture_output=True, timeout=60)
             self.assertEqual(imported.returncode, 0, imported.stdout + imported.stderr)
             launcher = subprocess.run([sys.executable, 'scripts/local_server.py', '--help'],
-                cwd=extracted, env=env, text=True, capture_output=True, timeout=60)
+                cwd=extracted, env=env, text=True, encoding="utf-8", capture_output=True, timeout=60)
             self.assertEqual(launcher.returncode, 0, launcher.stdout + launcher.stderr)
             self.assertFalse((source / 'isolated.sqlite3').exists())
