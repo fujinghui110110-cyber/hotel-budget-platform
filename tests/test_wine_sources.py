@@ -1,6 +1,5 @@
-import tempfile
+import io
 import unittest
-from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
 
@@ -21,10 +20,10 @@ def _source_row(sheet, row, label, first_column, value=1):
 
 class WineSourceDiscoveryTests(unittest.TestCase):
     def _read_only(self, workbook):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "wine-sources.xlsx"
-            workbook.save(path)
-            return load_workbook(path, read_only=True, data_only=True)
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        buffer.seek(0)
+        return load_workbook(buffer, read_only=True, data_only=True)
 
     def test_dedicated_detail_selects_leaf_income_and_cost(self):
         workbook = Workbook()

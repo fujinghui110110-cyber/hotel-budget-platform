@@ -706,40 +706,43 @@ def _sub_annual(upload, report_code, sheet, row_code, label, unit, monthly):
 
 def extract_sub_table_values(upload, workbook_path):
     wb = load_workbook(workbook_path, data_only=True, read_only=True)
-    skip = set(REPORTS.values()) | {"SYS_META"}
-    rows = []
-    for name in wb.sheetnames:
-        if name in skip:
-            continue
-        grid = _detect_grid(wb[name])
-        if not grid:
-            continue
-        label_col, month_cols, header_idx = grid
-        report_code = sheet_slug(name)
-        for row_idx, row in enumerate(
-            wb[name].iter_rows(min_row=header_idx + 1, values_only=False),
-            start=header_idx + 1,
-        ):
-            label_cell = _cell_at(row, label_col)
-            label = _clean_label(label_cell.value if label_cell is not None else None)
-            if not label:
+    try:
+        skip = set(REPORTS.values()) | {"SYS_META"}
+        rows = []
+        for name in wb.sheetnames:
+            if name in skip:
                 continue
-            unit = _unit_for_label(label)
-            monthly = []
-            for month, col in enumerate(month_cols, start=1):
-                cell = _cell_at(row, col)
-                value = cell.value if cell is not None else None
-                parsed = _sub_value(
-                    upload, report_code, name, f"R{row_idx:04d}", label, unit,
-                    f"{month:02d}", f"{get_column_letter(col)}{row_idx}", value,
-                )
-                if parsed is not None:
-                    monthly.append(parsed)
-            rows.extend(monthly)
-            if len(monthly) == len(month_cols):
-                rows.append(_sub_annual(upload, report_code, name, f"R{row_idx:04d}", label, unit, monthly))
-    NormalizedValue.objects.bulk_create(rows)
-    return len(rows)
+            grid = _detect_grid(wb[name])
+            if not grid:
+                continue
+            label_col, month_cols, header_idx = grid
+            report_code = sheet_slug(name)
+            for row_idx, row in enumerate(
+                wb[name].iter_rows(min_row=header_idx + 1, values_only=False),
+                start=header_idx + 1,
+            ):
+                label_cell = _cell_at(row, label_col)
+                label = _clean_label(label_cell.value if label_cell is not None else None)
+                if not label:
+                    continue
+                unit = _unit_for_label(label)
+                monthly = []
+                for month, col in enumerate(month_cols, start=1):
+                    cell = _cell_at(row, col)
+                    value = cell.value if cell is not None else None
+                    parsed = _sub_value(
+                        upload, report_code, name, f"R{row_idx:04d}", label, unit,
+                        f"{month:02d}", f"{get_column_letter(col)}{row_idx}", value,
+                    )
+                    if parsed is not None:
+                        monthly.append(parsed)
+                rows.extend(monthly)
+                if len(monthly) == len(month_cols):
+                    rows.append(_sub_annual(upload, report_code, name, f"R{row_idx:04d}", label, unit, monthly))
+        NormalizedValue.objects.bulk_create(rows)
+        return len(rows)
+    finally:
+        wb.close()
 
 
 @functools.lru_cache(maxsize=8)

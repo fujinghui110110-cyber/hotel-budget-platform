@@ -84,7 +84,7 @@ def build_upload_audit(upload, *, refresh=False):
     cache = original.parent / 'data_read_audit.json'
     if not refresh and upload.original_path:
         try:
-            saved = json.loads(cache.read_text())
+            saved = json.loads(cache.read_text(encoding='utf-8'))
             if saved.get('fingerprint') == fingerprint:
                 return saved
         except (OSError, ValueError):
@@ -95,8 +95,8 @@ def build_upload_audit(upload, *, refresh=False):
     expected = read_count = report_count = withheld_count = 0
     rejected_without_values = upload.status == UploadVersion.Status.REJECTED and not stats['count']
     try:
-        manifest = json.loads(manifest_path.read_text()) if manifest_path else {}
-        base = json.loads(base_path.read_text()) if base_path else {}
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8')) if manifest_path else {}
+        base = json.loads(base_path.read_text(encoding='utf-8')) if base_path else {}
     except (OSError, ValueError) as exc:
         issues.append(_issue('MANIFEST_UNAVAILABLE', detail=f'无法读取该版本映射清单：{type(exc).__name__}'))
         manifest = base = {}

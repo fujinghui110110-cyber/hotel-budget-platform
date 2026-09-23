@@ -160,7 +160,7 @@ def process_legacy_rehearsal(upload, source_path, run):
     template_path = resolve_template_path(upload.cycle.template.manifest_path)
     if not template_path.is_absolute():
         template_path = Path(settings.BASE_DIR) / template_path
-    canonical_manifest = json.loads(template_path.read_text())
+    canonical_manifest = json.loads(template_path.read_text(encoding='utf-8'))
     offset = upload.cycle.budget_year - source_year
     title_years = {int(m[1]) for sheet in source['sheets'] for c in sheet.get('cells', [])
                    if isinstance(c.get('cached_value'), str)
@@ -258,7 +258,7 @@ def process_legacy_rehearsal(upload, source_path, run):
     from budgeting.excel.supplementary import extract_supplementary_values
     extract_supplementary_values(upload, source_path, validation_run=run)
     path = source_path.parent / 'legacy_manifest.json'
-    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
     template, _ = TemplateVersion.objects.update_or_create(version=f'LEGACY-{upload.pk}', defaults={
         'budget_year':upload.cycle.budget_year, 'file_path':str(source_path), 'manifest_path':str(path),
         'formula_manifest_hash':upload.sha256, 'rule_version':'LEGACY-CACHE-1', 'is_active':False})

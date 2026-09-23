@@ -115,15 +115,16 @@ def validate_xlsx_zip(path):
         seen_raw = set()
         seen_normalized = set()
         for info in zf.infolist():
-            norm = _normalised_zip_name(info.filename)
+            raw_name = getattr(info, "orig_filename", info.filename)
+            norm = _normalised_zip_name(raw_name)
             lower_norm = norm.lower()
             total += info.file_size
             if info.filename in seen_raw or lower_norm in seen_normalized:
                 issues.append(("P0", "ZIP_DUPLICATE_ENTRY", info.filename))
             seen_raw.add(info.filename)
             seen_normalized.add(lower_norm)
-            if _unsafe_zip_name(info.filename):
-                issues.append(("P0", "ZIP_TRAVERSAL", info.filename))
+            if _unsafe_zip_name(raw_name):
+                issues.append(("P0", "ZIP_TRAVERSAL", raw_name))
             is_xml = lower_norm.endswith((".xml", ".rels"))
             if is_xml and info.file_size > MAX_XML_BYTES:
                 issues.append(("P0", "XML_SIZE", info.filename))
@@ -682,7 +683,7 @@ def repair_drawing_namespaces(path):
                 zout.writestr(info, data)
 
         os.chmod(temp_path, source.stat().st_mode & 0o7777)
-        with temp_path.open("rb") as handle:
+        with temp_path.open("r+b") as handle:
             os.fsync(handle.fileno())
         os.replace(temp_path, source)
     except Exception:
