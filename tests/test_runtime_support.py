@@ -1,5 +1,6 @@
 """Runtime boundary checks; Windows system calls use stubs on non-Windows hosts."""
 import importlib.util
+import io
 from pathlib import Path
 import subprocess
 import sys
@@ -13,6 +14,17 @@ SPEC.loader.exec_module(runtime)
 
 
 class RuntimeSupportTests(TestCase):
+    def test_redirected_windows_console_can_write_chinese(self):
+        buffer = io.BytesIO()
+        stream = io.TextIOWrapper(buffer, encoding='cp1252', newline='\n')
+        with mock.patch.object(sys, 'stdout', stream), mock.patch.object(sys, 'stderr', stream), mock.patch.dict(runtime.os.environ):
+            runtime.configure_utf8_streams()
+            print('预算系统已启动')
+            stream.flush()
+            self.assertEqual(buffer.getvalue().decode('utf-8'), '预算系统已启动\n')
+            self.assertEqual(runtime.os.environ['PYTHONUTF8'], '1')
+        stream.close()
+
     def test_lock_rejects_concurrent_holder_and_releases(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'test.lock'

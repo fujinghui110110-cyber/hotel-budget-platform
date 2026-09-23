@@ -34,12 +34,13 @@ class PublicAccessTests(TestCase):
                 return tunnel
 
             with mock.patch.multiple(public_access, RUNTIME=root, STATE=root/'state.json', STOP_REQUEST=root/'stop', LOGS=root), \
+                 mock.patch.object(public_access, 'public_environment', return_value={}), \
                  mock.patch.object(public_access, 'security_check'), mock.patch.object(public_access, 'ensure_binary', return_value=root/'cloudflared'), \
                  mock.patch.object(public_access, 'process_identity', return_value=None), mock.patch.object(public_access.sys, 'platform', 'darwin'), \
                  mock.patch.object(public_access.signal, 'signal'), mock.patch.object(public_access.subprocess, 'Popen', side_effect=spawn) as popen:
                 with self.assertRaises(SystemExit):
                     public_access.serve()
-            state = json.loads((root/'state.json').read_text())
+                state = json.loads((root/'state.json').read_text(encoding='utf-8'))
             self.assertIn('超时', state['error'])
             self.assertNotIn('网页服务', state['error'])
             self.assertEqual(popen.call_count, 2)
@@ -110,7 +111,7 @@ class PublicAccessTests(TestCase):
                 awake.terminate.assert_called_once()
                 awake.wait.assert_called_once()
                 import json
-                state = json.loads((root / 'state.json').read_text())
+                state = json.loads((root / 'state.json').read_text(encoding='utf-8'))
                 self.assertEqual(state['status'], 'failed')
                 self.assertFalse(state['running'])
                 self.assertEqual(state['children'], [])

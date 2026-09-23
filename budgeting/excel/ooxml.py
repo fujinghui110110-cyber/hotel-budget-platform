@@ -50,6 +50,10 @@ def _normalised_zip_name(name):
     return posixpath.normpath(name.replace("\\", "/"))
 
 
+def _zip_entry_name(info):
+    return getattr(info, "orig_filename", info.filename)
+
+
 def _unsafe_zip_name(name):
     normalized = _normalised_zip_name(name)
     # ZIP directory records end in one slash; interior empty components remain unsafe.
@@ -106,8 +110,9 @@ def validate_xlsx_zip(path):
     except zipfile.BadZipFile:
         return [("P0", "BAD_ZIP", "文件不是有效 xlsx/OOXML 压缩包")]
     with zf:
-        names = zf.namelist()
-        if len(names) > MAX_ZIP_ENTRIES:
+        entry_names = [_zip_entry_name(info) for info in zf.infolist()]
+        names = {_normalised_zip_name(name) for name in entry_names}
+        if len(entry_names) > MAX_ZIP_ENTRIES:
             issues.append(("P0", "ZIP_ENTRY_COUNT", "压缩包条目数量超过安全上限"))
         required = {"[Content_Types].xml", "xl/workbook.xml"}
         if not required.issubset(set(names)):
@@ -115,21 +120,21 @@ def validate_xlsx_zip(path):
         seen_raw = set()
         seen_normalized = set()
         for info in zf.infolist():
-            raw_name = getattr(info, "orig_filename", info.filename)
+            raw_name = _zip_entry_name(info)
             norm = _normalised_zip_name(raw_name)
             lower_norm = norm.lower()
             total += info.file_size
-            if info.filename in seen_raw or lower_norm in seen_normalized:
-                issues.append(("P0", "ZIP_DUPLICATE_ENTRY", info.filename))
-            seen_raw.add(info.filename)
+            if raw_name in seen_raw or lower_norm in seen_normalized:
+                issues.append(("P0", "ZIP_DUPLICATE_ENTRY", raw_name))
+            seen_raw.add(raw_name)
             seen_normalized.add(lower_norm)
             if _unsafe_zip_name(raw_name):
                 issues.append(("P0", "ZIP_TRAVERSAL", raw_name))
             is_xml = lower_norm.endswith((".xml", ".rels"))
             if is_xml and info.file_size > MAX_XML_BYTES:
-                issues.append(("P0", "XML_SIZE", info.filename))
+                issues.append(("P0", "XML_SIZE", raw_name))
             if lower_norm.endswith((".bin", ".vba", "vbaproject.bin")):
-                issues.append(("P0", "MACRO_OR_OLE", info.filename))
+                issues.append(("P0", "MACRO_OR_OLE", raw_name))
             if lower_norm.startswith(
                 (
                     "xl/externallinks/",
@@ -139,20 +144,21 @@ def validate_xlsx_zip(path):
                     "xl/activex/",
                 )
             ):
-                issues.append(("P0", "BLOCKED_PART", info.filename))
+                issues.append(("P0", "BLOCKED_PART", raw_name))
             if lower_norm.startswith("xl/externallinks/"):
                 issues.append(("P0", "EXTERNAL_LINK", "存在外部链接包"))
             if lower_norm.startswith("xl/connections"):
                 issues.append(("P0", "CONNECTION", "存在外部连接"))
             ratio = info.file_size / max(info.compress_size, 1)
             if ratio > MAX_RATIO:
-                issues.append(("P0", "ZIP_RATIO", info.filename))
+                issues.append(("P0", "ZIP_RATIO", raw_name))
         if total > MAX_UNZIPPED_BYTES:
             issues.append(("P0", "UNZIPPED_SIZE", "解压后超过 500 MiB"))
         if any(issue[0] == "P0" for issue in issues):
             return issues
         for info in zf.infolist():
-            norm = _normalised_zip_name(info.filename)
+            raw_name = _zip_entry_name(info)
+            norm = _normalised_zip_name(raw_name)
             lower_norm = norm.lower()
             is_xml = lower_norm.endswith((".xml", ".rels"))
             if is_xml and info.file_size:
@@ -160,12 +166,12 @@ def validate_xlsx_zip(path):
                     with zf.open(info) as fh:
                         raw = fh.read(MAX_XML_BYTES + 1)
                 except (KeyError, RuntimeError, zipfile.BadZipFile, zlib.error):
-                    issues.append(("P0", "ZIP_READ_ERROR", info.filename))
+                    issues.append(("P0", "ZIP_READ_ERROR", raw_name))
                     continue
                 text = _decode_xml_for_scan(raw)
                 if XML_DTD_RE.search(text):
-                    issues.append(("P0", "XML_ENTITY", info.filename))
-                issues.extend(_external_relationship_issues(info.filename, text))
+                    issues.append(("P0", "XML_ENTITY", raw_name))
+                issues.extend(_external_relationship_issues(raw_name, text))
     return issues
 
 

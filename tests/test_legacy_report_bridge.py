@@ -37,7 +37,7 @@ class LegacyReportBridgeTests(TestCase):
         self.context=ReportContext(2027,self.cycle.pk,'PL_TOTAL_WINE','WORKING',(self.projects[0].pk,))
 
     def write_manifest(self):
-        self.manifest_path.write_text(json.dumps(self.manifest,ensure_ascii=False))
+        self.manifest_path.write_text(json.dumps(self.manifest,ensure_ascii=False), encoding="utf-8")
 
     def test_bound_rehearsal_reaches_main_drilldown_and_export(self):
         result=query_report(self.context)

@@ -35,13 +35,21 @@ SHEET = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 def _xlsx(path: Path, extra: dict[str, str | bytes] | None = None) -> None:
-    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as package:
-        package.writestr("[Content_Types].xml", CONTENT_TYPES)
-        package.writestr("xl/workbook.xml", WORKBOOK)
-        package.writestr("xl/_rels/workbook.xml.rels", RELS)
-        package.writestr("xl/worksheets/sheet1.xml", SHEET)
-        for name, payload in (extra or {}).items():
+    def writestr(package, name, payload):
+        if "\\" in name:
+            info = zipfile.ZipInfo(name)
+            info.filename = name
+            package.writestr(info, payload)
+        else:
             package.writestr(name, payload)
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as package:
+        writestr(package, "[Content_Types].xml", CONTENT_TYPES)
+        writestr(package, "xl/workbook.xml", WORKBOOK)
+        writestr(package, "xl/_rels/workbook.xml.rels", RELS)
+        writestr(package, "xl/worksheets/sheet1.xml", SHEET)
+        for name, payload in (extra or {}).items():
+            writestr(package, name, payload)
 
 
 def _codes(path: Path) -> set[str]:
@@ -57,6 +65,7 @@ class ZipPreflightShortCircuitTests(unittest.TestCase):
             for name in ("../", "xl/../", "/xl/", "C:/xl/", "xl//", "xl//worksheets/", "xl/./", "xl\\worksheets/"):
                 with self.subTest(name=name):
                     _xlsx(path, {name: ""})
+                    self.assertIn(name.encode(), path.read_bytes())
                     self.assertIn("ZIP_TRAVERSAL", _codes(path))
             _xlsx(path, {"xl/": "", "xl": ""})
             self.assertIn("ZIP_DUPLICATE_ENTRY", _codes(path))

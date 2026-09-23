@@ -10,6 +10,19 @@ import psutil
 HOST_WINDOWS = os.name == "nt"
 
 
+def configure_utf8_streams():
+    os.environ["PYTHONUTF8"] = "1"
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
+if HOST_WINDOWS:
+    configure_utf8_streams()
+
+
 class FileLock(AbstractContextManager):
     def __init__(self, path):
         self.path = Path(path)

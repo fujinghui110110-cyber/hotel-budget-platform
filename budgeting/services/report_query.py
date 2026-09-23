@@ -41,10 +41,11 @@ class ReportResult:
 def _frozen_selection(context):
     snapshot = FreezeSnapshot.objects.get(pk=context.snapshot_id, cycle_id=context.cycle_id,
                                           status=FreezeSnapshot.Status.COMPLETE)
+    selection_path = (Path(snapshot.directory.replace("\\", "/")) / "report-selection.json").as_posix()
     artifact = SnapshotArtifact.objects.get(snapshot=snapshot,
-        relative_path=str(Path(snapshot.directory) / "report-selection.json"))
+        relative_path__in=(selection_path, selection_path.replace("/", "\\")))
     root = Path(settings.BUDGET_STORAGE_ROOT).resolve()
-    path = (root / artifact.relative_path).resolve()
+    path = (root / artifact.relative_path.replace("\\", "/")).resolve()
     if not path.is_relative_to(root):
         raise ValueError("快照路径越界。")
     raw = path.read_bytes()

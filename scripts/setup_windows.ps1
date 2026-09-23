@@ -1,4 +1,6 @@
 $ErrorActionPreference = 'Stop'
+$env:PYTHONUTF8 = '1'
+$env:PYTHONIOENCODING = 'utf-8'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $manifest = Get-Content (Join-Path $PSScriptRoot 'windows_dependencies.json') -Raw | ConvertFrom-Json

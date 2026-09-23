@@ -1,4 +1,5 @@
 import importlib.util
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -20,11 +21,12 @@ class RelocateDataTests(TestCase):
             uploaded.parent.mkdir(parents=True)
             uploaded.write_bytes(b'uploaded workbook')
             database = root / 'db.sqlite3'
-            with sqlite3.connect(database) as connection:
-                connection.execute('CREATE TABLE budgeting_templateversion(id INTEGER, file_path TEXT, manifest_path TEXT)')
-                connection.execute('INSERT INTO budgeting_templateversion VALUES (1, ?, ?)', ('/old/project/artifacts/v3/2027/template.xlsx', '/old/project/artifacts/missing.json'))
-                connection.execute('CREATE TABLE budgeting_specialindicatorbatch(id INTEGER, original TEXT)')
-                connection.execute('INSERT INTO budgeting_specialindicatorbatch VALUES (1, ?)', ('/old/project/storage/uploads/original.xlsx',))
+            with closing(sqlite3.connect(database)) as connection:
+                with connection:
+                    connection.execute('CREATE TABLE budgeting_templateversion(id INTEGER, file_path TEXT, manifest_path TEXT)')
+                    connection.execute('INSERT INTO budgeting_templateversion VALUES (1, ?, ?)', ('/old/project/artifacts/v3/2027/template.xlsx', '/old/project/artifacts/missing.json'))
+                    connection.execute('CREATE TABLE budgeting_specialindicatorbatch(id INTEGER, original TEXT)')
+                    connection.execute('INSERT INTO budgeting_specialindicatorbatch VALUES (1, ?)', ('/old/project/storage/uploads/original.xlsx',))
             before = database.read_bytes()
             preview = module.relocate(database, '/old/project', root)
             self.assertEqual(preview['planned'], 2)
@@ -33,9 +35,9 @@ class RelocateDataTests(TestCase):
             report = module.relocate(database, '/old/project', root, apply=True)
             self.assertEqual(report['updated'], 2)
             self.assertTrue(Path(report['backup']).is_file())
-            with sqlite3.connect(report['backup']) as connection:
+            with closing(sqlite3.connect(report['backup'])) as connection:
                 self.assertEqual(connection.execute('SELECT file_path FROM budgeting_templateversion').fetchone()[0], '/old/project/artifacts/v3/2027/template.xlsx')
-            with sqlite3.connect(database) as connection:
+            with closing(sqlite3.connect(database)) as connection:
                 self.assertEqual(connection.execute('SELECT file_path FROM budgeting_templateversion').fetchone()[0], str(template))
                 self.assertEqual(connection.execute('SELECT original FROM budgeting_specialindicatorbatch').fetchone()[0], 'uploads/original.xlsx')
                 self.assertEqual(connection.execute('SELECT manifest_path FROM budgeting_templateversion').fetchone()[0], '/old/project/artifacts/missing.json')

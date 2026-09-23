@@ -129,7 +129,7 @@ class CockpitDataTests(TestCase):
             [(item["year"], item["kind_label"]) for item in trend["series"]],
             [(2023, "实际"), (2024, "实际"), (2025, "预测"), (2026, "预算")],
         )
-        template = Path("templates/budgeting/cockpit_trend.html").read_text()
+        template = Path("templates/budgeting/cockpit_trend.html").read_text(encoding="utf-8")
         self.assertIn("{{ item.kind_label }}", template)
 
 

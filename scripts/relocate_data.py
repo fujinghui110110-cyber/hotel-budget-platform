@@ -75,8 +75,11 @@ def relocate(database, old_root, new_root, apply=False):
         if apply and changes:
             stamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
             backup = database.with_name(database.name + '.before-relocate-' + stamp + '.bak')
-            with sqlite3.connect(backup) as backup_connection:
+            backup_connection = sqlite3.connect(backup)
+            try:
                 connection.backup(backup_connection)
+            finally:
+                backup_connection.close()
             backup.chmod(0o600)
             report['backup'] = str(backup)
             with connection:

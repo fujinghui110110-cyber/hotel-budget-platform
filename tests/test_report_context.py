@@ -104,6 +104,9 @@ class ReportQueryTests(TestCase):
         with override_settings(BUDGET_STORAGE_ROOT=self.tmp.name):
             result = query_report(frozen)
             self.assertEqual(next(m.value for m in result.metrics if m.row_code=='ADR'),96)
+            SnapshotArtifact.objects.filter(snapshot=snapshot).update(relative_path='snapshot\\report-selection.json')
+            result = query_report(frozen)
+            self.assertEqual(next(m.value for m in result.metrics if m.row_code=='ADR'),96)
             (folder/'report-selection.json').write_text('{}')
             with self.assertRaisesMessage(ValueError,'冻结集合文件校验失败'):
                 query_report(frozen)

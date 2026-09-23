@@ -1437,8 +1437,8 @@ def freeze_cycle(cycle, actor=None):
                 raise ValueError("冻结提交前版本状态发生变化")
             if _freeze_selection(cycle) != selection:
                 raise ValueError("冻结提交前版本状态发生变化")
-            snapshot.directory = str(final.relative_to(settings.BUDGET_STORAGE_ROOT))
-            snapshot.manifest_path = str((final / "manifest.json").relative_to(settings.BUDGET_STORAGE_ROOT))
+            snapshot.directory = final.relative_to(settings.BUDGET_STORAGE_ROOT).as_posix()
+            snapshot.manifest_path = (final / "manifest.json").relative_to(settings.BUDGET_STORAGE_ROOT).as_posix()
             snapshot.history_bindings = selection.get("history_bindings", {})
             snapshot.status = FreezeSnapshot.Status.COMPLETE
             snapshot.completed_at = timezone.now()
@@ -1448,7 +1448,7 @@ def freeze_cycle(cycle, actor=None):
                 SnapshotArtifact.objects.create(
                     snapshot=snapshot,
                     kind=path.suffix.lstrip(".") or "file",
-                    relative_path=str(path.relative_to(settings.BUDGET_STORAGE_ROOT)),
+                    relative_path=path.relative_to(settings.BUDGET_STORAGE_ROOT).as_posix(),
                     sha256=digest,
                     size=path.stat().st_size,
                 )
@@ -1456,14 +1456,14 @@ def freeze_cycle(cycle, actor=None):
             SnapshotArtifact.objects.create(
                 snapshot=snapshot,
                 kind="json",
-                relative_path=str(manifest_path.relative_to(settings.BUDGET_STORAGE_ROOT)),
+                relative_path=manifest_path.relative_to(settings.BUDGET_STORAGE_ROOT).as_posix(),
                 sha256=sha256_file(manifest_path),
                 size=manifest_path.stat().st_size,
             )
             SnapshotArtifact.objects.create(
                 snapshot=snapshot,
                 kind="zip",
-                relative_path=str(zip_path.relative_to(settings.BUDGET_STORAGE_ROOT)),
+                relative_path=zip_path.relative_to(settings.BUDGET_STORAGE_ROOT).as_posix(),
                 sha256=sha256_file(zip_path),
                 size=zip_path.stat().st_size,
             )
@@ -1754,5 +1754,5 @@ def _file_manifest(root):
     manifest = {}
     for file_path in sorted(root.rglob("*")):
         if file_path.is_file() and file_path.name != "manifest.json":
-            manifest[str(file_path.relative_to(root))] = sha256_file(file_path)
+            manifest[file_path.relative_to(root).as_posix()] = sha256_file(file_path)
     return manifest
