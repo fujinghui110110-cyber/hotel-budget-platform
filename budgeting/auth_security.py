@@ -1,5 +1,6 @@
 """Public login safeguards shared by normal and Django admin authentication."""
 import hashlib
+from contextlib import closing
 import ipaddress
 import sqlite3
 import time
@@ -50,7 +51,7 @@ def reserve_attempt(username, address, now=None):
         ("account:" + hashlib.sha256(username.casefold().strip().encode()).hexdigest(), 10),
         ("ip:" + hashlib.sha256(address.encode()).hexdigest(), 50),
     ]
-    with sqlite3.connect(str(settings.LOGIN_RATE_LIMIT_PATH), timeout=5) as db:
+    with closing(sqlite3.connect(str(settings.LOGIN_RATE_LIMIT_PATH), timeout=5)) as db, db:
         db.execute("CREATE TABLE IF NOT EXISTS attempts (key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires REAL NOT NULL)")
         db.execute("BEGIN IMMEDIATE")
         db.execute("DELETE FROM attempts WHERE expires <= ?", (now,))

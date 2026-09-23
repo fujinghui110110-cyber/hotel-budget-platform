@@ -69,7 +69,10 @@ class ReleasePackagingTests(unittest.TestCase):
             extracted = root / 'clean'
             extracted.mkdir()
             system_update.validate_archive(archive, extracted, version)
-            self.assertTrue((extracted / '一键启动.command').stat().st_mode & 0o111)
+            if os.name != 'nt':
+                self.assertTrue((extracted / '一键启动.command').stat().st_mode & 0o111)
+            else:
+                self.assertTrue((extracted / '一键启动-Windows.bat').is_file())
             self.assertNotIn('hotel_budget/settings.py', result['files'])
             self.assertFalse((extracted / 'db.sqlite3').exists())
             env = {key: value for key, value in os.environ.items()

@@ -1,4 +1,5 @@
 import hashlib
+from contextlib import closing
 import io
 import json
 import os
@@ -105,12 +106,12 @@ class SystemUpdateTests(SimpleTestCase):
         (backup / 'code/manage.py').write_text('old')
         (self.root / 'manage.py').write_text('new')
         db = self.root / 'db.sqlite3'
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn, conn:
             conn.execute('create table sentinel(value text)')
             conn.execute("insert into sentinel values ('preserved')")
-        with sqlite3.connect(db) as source, sqlite3.connect(backup / 'database.sqlite3') as target:
+        with closing(sqlite3.connect(db)) as source, closing(sqlite3.connect(backup / 'database.sqlite3')) as target:
             source.backup(target)
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn, conn:
             conn.execute("insert into sentinel values ('new-upload')")
         journal = {'backup': str(backup), 'old_files': ['manage.py'], 'new_files': ['manage.py'],
                    'database': str(db), 'database_existed': True, 'old_python_pointer': {},
@@ -120,7 +121,7 @@ class SystemUpdateTests(SimpleTestCase):
                 update.restore(journal)
             command.assert_not_called()  # Recovery must not execute the failed candidate's shutdown code.
         self.assertEqual((self.root / 'manage.py').read_text(), 'new')
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn, conn:
             self.assertEqual(conn.execute('select value from sentinel order by rowid').fetchall(), [('preserved',), ('new-upload',)])
 
     def test_stale_launch_without_process_does_not_spin_forever(self):

@@ -17,11 +17,11 @@ except ImportError:
     from runtime_support import FileLock, pid_alive, process_matches, stop_process_tree, detached_popen_kwargs, wsgi_command, process_identity, stop_identities
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNTIME = ROOT / '.runtime'
+RUNTIME = Path(os.getenv('BUDGET_RUNTIME_ROOT', ROOT / '.runtime'))
 STATE = RUNTIME / 'public-access.json'
 OPERATION = RUNTIME / 'public-operation.json'
 STOP_REQUEST = RUNTIME / 'public-stop-request'
-LOGS = ROOT / 'logs'
+LOGS = Path(os.getenv('BUDGET_LOG_ROOT', ROOT / 'logs'))
 PORT = 8769
 URL_PATTERN = re.compile(r'https://[a-z0-9]+(?:-[a-z0-9]+)*\.trycloudflare\.com\b')
 
@@ -33,7 +33,7 @@ def public_environment(url):
     env = os.environ.copy()
     # Use the same database and application options as the local server.
     for name in ('.env.production', '.env'):
-        path = ROOT / name
+        path = Path(os.getenv('BUDGET_INSTALL_ROOT', ROOT)) / name
         if path.exists():
             for raw in path.read_text().splitlines():
                 line = raw.strip()
@@ -45,6 +45,11 @@ def public_environment(url):
         fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, 'w') as handle:
             handle.write(secrets.token_urlsafe(64))
+    try:
+        from scripts.runtime_support import protect_private_file
+    except ImportError:
+        from runtime_support import protect_private_file
+    protect_private_file(key_path)
     env.update(DJANGO_SETTINGS_MODULE='config.settings', DJANGO_DEBUG='0',
                DJANGO_SECRET_KEY=key_path.read_text().strip(),
                DJANGO_ALLOWED_HOSTS=url.removeprefix('https://'),

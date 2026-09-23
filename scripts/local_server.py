@@ -11,7 +11,10 @@ import urllib.error
 import urllib.request
 import webbrowser
 
-from runtime_support import FileLock, process_matches, stop_process_tree, detached_popen_kwargs, wsgi_command, process_identity, stop_identities
+try:
+    from scripts.runtime_support import FileLock, process_matches, stop_process_tree, detached_popen_kwargs, wsgi_command, process_identity, stop_identities
+except ImportError:
+    from runtime_support import FileLock, process_matches, stop_process_tree, detached_popen_kwargs, wsgi_command, process_identity, stop_identities
 
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -8,7 +8,14 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from budgeting.models import BudgetCycle, IndicatorProject, Project, User
+from budgeting.models import (
+    BudgetCycle,
+    IndicatorProject,
+    ManagementMetricBatch,
+    ManagementMetricValue,
+    Project,
+    User,
+)
 from budgeting.management_metric_views import _preview_rows
 
 
@@ -70,6 +77,63 @@ class ManagementMetricViewTests(TestCase):
         self.client.force_login(project_user)
         response = self.client.get(reverse("management_metrics"), {"project": other_identity.pk})
         self.assertEqual(response.status_code, 404)
+        comparison.assert_not_called()
+
+    def test_project_user_default_page_and_csv_are_scoped_to_own_project(self):
+        other_project = Project.objects.create(code="OTHER", name="其他酒店")
+        other_identity = IndicatorProject.objects.create(name="其他酒店", project=other_project)
+        batch = ManagementMetricBatch.objects.create(
+            original_name="history.xlsx",
+            sha256="b" * 64,
+            money_unit="YUAN",
+            data_kind="ACTUAL",
+            report_code="PL_TOTAL_NOWINE",
+            reason="测试",
+            created_by=self.admin,
+        )
+        ManagementMetricValue.objects.bulk_create(
+            [
+                ManagementMetricValue(
+                    batch=batch,
+                    project=identity,
+                    metric="revenue_total",
+                    year=2024,
+                    month=0,
+                    value=value,
+                    source_sheet="收入",
+                    source_cell=cell,
+                )
+                for identity, value, cell in (
+                    (self.identity, 101, "N4"),
+                    (other_identity, 999, "N5"),
+                )
+            ]
+        )
+        project_user = User.objects.create_user(username="metric_project_default", role="PROJECT", project=self.project)
+        self.client.force_login(project_user)
+
+        response = self.client.get(reverse("management_metrics"), {"year": 2027, "metric": "revenue_total"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_project"], self.identity.pk)
+        self.assertContains(response, self.project.name)
+        self.assertNotContains(response, other_project.name)
+
+        response = self.client.get(reverse("management_metric_export"), {"year": 2027, "metric": "revenue_total"})
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode("utf-8-sig")
+        self.assertIn(self.project.name, body)
+        self.assertNotIn(other_project.name, body)
+        self.assertNotIn("999", body)
+
+    @patch("budgeting.management_metric_views.service.comparison_data")
+    def test_unbound_project_user_is_rejected_for_page_and_csv(self, comparison):
+        project_user = User.objects.create_user(username="metric_project_unbound", role="PROJECT")
+        self.client.force_login(project_user)
+
+        response = self.client.get(reverse("management_metrics"))
+        self.assertEqual(response.status_code, 403)
+        response = self.client.get(reverse("management_metric_export"))
+        self.assertEqual(response.status_code, 403)
         comparison.assert_not_called()
 
     @patch("budgeting.management_metric_views.service.comparison_data")

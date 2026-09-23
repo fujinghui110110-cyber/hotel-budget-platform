@@ -7,6 +7,8 @@ import sys
 
 import psutil
 
+HOST_WINDOWS = os.name == "nt"
+
 
 class FileLock(AbstractContextManager):
     def __init__(self, path):
@@ -17,7 +19,7 @@ class FileLock(AbstractContextManager):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.handle = self.path.open('a+b')
         try:
-            if sys.platform == 'win32':
+            if HOST_WINDOWS:
                 import msvcrt
                 self.handle.seek(0, os.SEEK_END)
                 if self.handle.tell() == 0:
@@ -36,7 +38,7 @@ class FileLock(AbstractContextManager):
 
     def __exit__(self, *args):
         if self.handle is not None:
-            if sys.platform == 'win32':
+            if HOST_WINDOWS:
                 import msvcrt
                 self.handle.seek(0)
                 msvcrt.locking(self.handle.fileno(), msvcrt.LK_UNLCK, 1)
@@ -145,3 +147,21 @@ def wsgi_command(port, public=False):
     if not public and os.getenv('TRUST_PROXY', '0') != '1':
         command += ['--forwarded-allow-ips', '']
     return command
+
+
+def protect_private_file(path):
+    """Restrict generated secrets on the actual host filesystem."""
+    path = Path(path)
+    if os.name != 'nt':
+        path.chmod(0o600)
+        return
+    import csv
+    import re
+    identity = subprocess.check_output(['whoami', '/user', '/fo', 'csv', '/nh']).decode('utf-8', errors='replace')
+    sid = list(csv.reader(identity.strip().splitlines()))[-1][-1]
+    if not re.fullmatch(r'S-1-[0-9-]+', sid):
+        raise RuntimeError('无法确认本机账号权限，未启用公网访问。')
+    result = subprocess.run(['icacls', str(path), '/inheritance:r', '/grant:r',
+                             '*' + sid + ':F', '*S-1-5-18:F'], capture_output=True)
+    if result.returncode:
+        raise RuntimeError('无法保护本机密钥，请检查文件夹权限。')

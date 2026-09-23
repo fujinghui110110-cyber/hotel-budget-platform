@@ -114,13 +114,13 @@ def configure(token):
             raise UpdateError('系统正在更新，请稍后配置。')
         target = runtime('update-config.json')
         write_json(target, {'token': token})
-        if sys.platform == 'win32':
-            # chmod alone does not restrict Windows ACLs. Use the current SID, not a localized name.
-            sid = subprocess.check_output(['whoami', '/user', '/fo', 'csv', '/nh'], text=True).strip().split(',')[-1].strip('"')
-            result = subprocess.run(['icacls', str(target), '/inheritance:r', '/grant:r', '*' + sid + ':F', '*S-1-5-18:F'], capture_output=True)
-            if result.returncode:
-                target.unlink(missing_ok=True)
-                raise UpdateError('无法保护下载凭据的文件权限，配置未保存。')
+        from scripts.runtime_support import protect_private_file
+        try:
+            protect_private_file(target)
+        except (OSError, RuntimeError):
+            target.unlink(missing_ok=True)
+            raise UpdateError('无法保护下载凭据的文件权限，配置未保存。') from None
+
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -375,7 +375,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['status', 'check', 'launch', 'apply', 'recover'])
     args = parser.parse_args()
-    import local_server
+    from scripts import local_server
     local_server.load_environment()
     if args.action == 'launch':
         child = subprocess.Popen([sys.executable, str(ROOT / 'scripts/system_update.py'), 'apply'], cwd=ROOT, stdin=subprocess.DEVNULL, **detached_popen_kwargs())

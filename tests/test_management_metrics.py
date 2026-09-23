@@ -75,6 +75,12 @@ class ManagementMetricsTests(TestCase):
         self.history(2029,200,'ACTUAL')
         self.assertEqual(self.result()['rows'][0]['values'],[None,None,None,None])
 
+    def test_allowed_project_scope_excludes_other_indicator_projects(self):
+        other_project = Project.objects.create(code='OTHER', name='另一酒店')
+        IndicatorProject.objects.create(name='另一酒店', project=other_project)
+        result = self.result(allowed_project_ids=[self.project.pk])
+        self.assertEqual([row['name'] for row in result['rows']], ['测试'])
+
     def test_ratios_not_summed_or_averaged(self):
         self.history(2027,Decimal('.5'),metric='occ')
         other=IndicatorProject.objects.create(name='另一酒店')

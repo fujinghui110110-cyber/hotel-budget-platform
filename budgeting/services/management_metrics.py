@@ -119,17 +119,26 @@ def _delta(values, metric, compare_index=2):
     return delta, growth
 
 
-def comparison_data(*, cycle, year, report_code, metric, month=0, base_year=None, project_id=None, compare_index=2):
+def comparison_data(*, cycle, year, report_code, metric, month=0, base_year=None, project_id=None,
+                     allowed_project_ids=None, compare_index=2):
     if metric not in METRIC_CODES or report_code not in REPORTS or not 0 <= month <= 12 or compare_index not in (0, 1, 2):
         raise ValueError('指标、报表或月份无效。')
     base_year = year - 3 if base_year is None else base_year
     periods = [(base_year, 'ACTUAL', f'{base_year} 实际'),
                (base_year + 1, 'ACTUAL', f'{base_year + 1} 实际'),
                (year - 1, 'FORECAST', f'{year - 1} 预测'), (year, 'BUDGET', f'{year} 预算')]
+    if allowed_project_ids is not None:
+        try:
+            allowed_project_ids = {int(value) for value in allowed_project_ids if value is not None}
+        except (TypeError, ValueError):
+            allowed_project_ids = set()
     identities = list(IndicatorProject.objects.select_related('project').all())
     links = {p.pk: p.project or _match_project(p.name) for p in identities}
     # Existing budget projects must appear even before a historical import.
     uploads = list(latest_report_uploads(cycle)) if cycle and cycle.budget_year == year else []
+    if allowed_project_ids is not None:
+        identities = [p for p in identities if getattr(links.get(p.pk), 'pk', None) in allowed_project_ids]
+        uploads = [pc for pc in uploads if pc.project_id in allowed_project_ids]
     linked_ids = {p.pk for p in links.values() if p is not None}
     for pc in uploads:
         if pc.project_id not in linked_ids:

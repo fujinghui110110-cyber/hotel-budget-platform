@@ -31,6 +31,8 @@ def build_bridge(repo, output):
     if launcher.count(anchor) != 1:
         raise ValueError('Legacy launcher entry point changed; bridge needs fresh review')
     launcher = launcher.replace(anchor, anchor + "    sys.path.insert(0, str(ROOT))\n    from scripts.bridge_bootstrap import dispatch_active_release\n    load_environment()\n    dispatch_active_release(ROOT)\n")
+    import_line = next(line for line in launcher.splitlines() if line.startswith('from runtime_support import '))
+    launcher = launcher.replace(import_line, 'try:\n    ' + import_line.replace('from runtime_support', 'from scripts.runtime_support') + '\nexcept ImportError:\n    ' + import_line)
     files['scripts/local_server.py'] = launcher.encode()
     files['system_version.json'] = (json.dumps({'version': BRIDGE_VERSION}) + '\n').encode()
     manifest = {

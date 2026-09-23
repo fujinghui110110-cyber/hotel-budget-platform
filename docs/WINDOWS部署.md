@@ -24,31 +24,41 @@ Python 是系统运行环境；LibreOffice 在后台重新计算 Excel 公式，
 
 ## 数据与迁移
 
-代码放 GitHub，预算原件、数据库和密码保存在服务器电脑。全新安装只有空数据库和新管理员；迁移现有系统必须额外带上原数据和模板。
+代码放 GitHub，预算原件、数据库、已使用模板和密码保存在服务器电脑。源码和在线更新包只带源代码、部署文件及发布校验清单，不带业务数据库、上传底稿或业务模板；全新安装或更新完成后，由管理员在“模板管理”中按实际预算年度和预算版本发布空白模板。迁移现有系统时才复制数据库、storage、历史模板和配置。
 
 迁移前停止旧电脑的本机与公网服务，安全备份并复制以下内容到新项目目录，保持相对目录不变：
 
 - `db.sqlite3`：业务数据和账号。
 - `storage/`：上传原件、重算结果、专项指标原件及归档文件。
-- `artifacts/`：基础模板及 manifest，现有基础模板位于 `artifacts/v3/2027/`，不能遗漏。
+- `artifacts/` 或业务数据目录中的模板文件：旧系统已经使用的模板、manifest 及其历史引用，迁移时不能遗漏；这些文件不从源码或在线更新包补齐。
 - `source/`（旧目录存在时）：模板来源材料；如果数据库或 `SOURCE_WORKBOOK` 引用了这里的文件，必须复制。
 - `.env`、`.env.production`（存在时）：逐项核对再使用。`DATABASE_PATH`、`BUDGET_STORAGE_ROOT`、`SOURCE_WORKBOOK` 等 Mac 绝对路径须改成新电脑路径；`SOFFICE_BIN` 改成实际 Windows LibreOffice 路径，例如 `C:\Program Files\LibreOffice\program\soffice.exe`。`.env.production` 优先。
 
 不复制旧电脑的 `.venv` 或 `.runtime`，运行 Windows 安装程序创建本机运行环境。若安装程序已启动系统，先双击停止文件，再运行下面的路径迁移命令。此工具只修改数据库中已知的文件引用，不改写预算 Excel 或 manifest 原件；专项指标 FileField 会转换为 storage 内相对路径。默认仅预览：
 
 ```bat
-.venv\Scripts\python.exe scripts\relocate_data.py --old-root "/Users/frank/Documents/ChatGPT/预算系统" --report "迁移预览.json"
+set "OLD_ROOT=D:\OldHotelBudget"
+.venv\Scripts\python.exe scripts\relocate_data.py --old-root "%OLD_ROOT%" --report "迁移预览.json"
 ```
 
 确认报告后执行：
 
 ```bat
-.venv\Scripts\python.exe scripts\relocate_data.py --old-root "/Users/frank/Documents/ChatGPT/预算系统" --apply --report "迁移执行.json"
+set "OLD_ROOT=D:\OldHotelBudget"
+.venv\Scripts\python.exe scripts\relocate_data.py --old-root "%OLD_ROOT%" --apply --report "迁移执行.json"
 ```
 
 `--old-root` 必须填写旧项目真实根目录。工具默认操作新目录的 `db.sqlite3`；若使用自定义数据库，显式加 `--database "D:\数据\db.sqlite3"`。执行修改前会在数据库旁生成 `.before-relocate-时间.bak` 备份。只更新新位置已存在的文件或目录引用；缺失文件、旧根目录外的引用保留原值并列入报告，退出码为 2。先补齐对应文件再以新的报告文件名重试，勿把退出码 2 当作已完整迁移。工具不自动修改环境文件、审计历史或任意 JSON 内的来源文字。
 
 报告无未解决项后，再双击启动文件，检查模板下载、项目报表和原件导出。不要把数据库、账号清单、环境文件或原始预算上传到 GitHub。
+
+## 旧版在线升级
+
+旧版服务器必须先在系统更新页面安装 `2026.09.23.0` 过渡版，再重新检查并安装 `2026.09.23.1` 等现代版本。`2026.09.23.0` 只更新在线升级器，保留旧业务代码和数据库 schema；不要让旧版直接安装需要新 schema 的现代版本。升级前仍须备份数据库、上传文件、历史模板和配置。
+
+过渡版 `v2026.09.23.0` 继续保持 GitHub `latest`，供旧客户端桥接。现代版本发布时使用 `--latest=false`，避免移动旧客户端依赖的 `latest`；现代升级器读取 GitHub `/releases`，过滤稳定、非 draft、非 prerelease 且带完整校验资产的版本，并选择最高版本。只有正式 Release 以及对应提交的 CI/provenance 证据齐全时，版本才可作为在线更新来源；GitHub Actions 或隔离升级记录不等于 Windows 实机验收，当前文档不把 Windows 实机验收写成已完成。
+
+私有仓库的更新凭据仅需本仓库的 `Contents: Read-only` 和 `Attestations: Read-only` 权限，不授予写权限。即使仓库公开，当前系统更新页面仍要求配置凭据；按 [GitHub 更新凭据说明](GitHub更新凭据一步一步操作.md) 操作。服务器缺少 `gh` 时，更新器会通过 `scripts/github_cli.py` 下载官方固定版本并校验固定 SHA-256，失败或校验不通过就拒绝更新。
 
 ## 排查
 

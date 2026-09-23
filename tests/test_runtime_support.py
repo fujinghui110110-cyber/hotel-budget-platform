@@ -25,7 +25,7 @@ class RuntimeSupportTests(TestCase):
 
     def test_windows_lock_uses_fixed_byte_and_unlocks(self):
         fake = SimpleNamespace(LK_NBLCK=2, LK_UNLCK=0, locking=mock.Mock())
-        with tempfile.TemporaryDirectory() as directory, mock.patch.object(runtime.sys, 'platform', 'win32'), mock.patch.dict(sys.modules, {'msvcrt': fake}):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(runtime, 'HOST_WINDOWS', True), mock.patch.dict(sys.modules, {'msvcrt': fake}):
             path = Path(directory) / 'test.lock'
             with runtime.FileLock(path):
                 self.assertEqual(path.read_bytes(), b'0')

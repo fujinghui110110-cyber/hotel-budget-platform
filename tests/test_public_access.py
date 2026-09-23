@@ -56,8 +56,23 @@ class PublicAccessTests(TestCase):
                     self.assertEqual(env[name], '1')
                 self.assertEqual(env['DJANGO_DEBUG'], '0')
                 self.assertGreaterEqual(len(env['DJANGO_SECRET_KEY']), 50)
-                self.assertEqual(os.stat(root / 'public-secret-key').st_mode & 0o777, 0o600)
+                if os.name == 'nt':
+                    import subprocess
+                    acl = subprocess.check_output(['icacls', str(root / 'public-secret-key')])
+                    self.assertNotIn(b'(I)', acl, 'Secret must not inherit directory access')
+                else:
+                    self.assertEqual(os.stat(root / 'public-secret-key').st_mode & 0o777, 0o600)
                 self.assertEqual(public_access.public_environment('https://other.trycloudflare.com')['DJANGO_SECRET_KEY'], env['DJANGO_SECRET_KEY'])
+
+    def test_active_release_reads_original_install_configuration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            install = Path(directory)
+            (install / '.env').write_text('DATABASE_PATH=' + str(install / 'existing.sqlite3') + '\n')
+            environment = {k: v for k, v in os.environ.items() if k != 'DATABASE_PATH'}
+            environment['BUDGET_INSTALL_ROOT'] = str(install)
+            with mock.patch.dict(os.environ, environment, clear=True), mock.patch.object(public_access, 'RUNTIME', install), mock.patch.object(public_access, 'ROOT', install / 'releases' / 'new'):
+                env = public_access.public_environment('https://test-budget.trycloudflare.com')
+            self.assertEqual(env['DATABASE_PATH'], str(install / 'existing.sqlite3'))
 
     def test_reject_arbitrary_origin_and_wildcards(self):
         for url in ('http://test.trycloudflare.com', 'https://*.trycloudflare.com', 'https://evil.com',
@@ -197,7 +212,10 @@ class PublicBinaryInstallTests(TestCase):
             with self.subTest(machine=machine), tempfile.TemporaryDirectory() as directory:
                 binary = self.install(Path(directory), self.archive(), machine)
                 self.assertEqual(binary.read_bytes(), b'test')
-                self.assertEqual(binary.stat().st_mode & 0o777, 0o755)
+                if os.name != 'nt':
+                    self.assertEqual(binary.stat().st_mode & 0o777, 0o755)
+                else:
+                    self.assertTrue(os.access(binary, os.R_OK))
 
     def test_archive_traversal_link_and_wrong_hash_rejected(self):
         for payload, digest in [(self.archive('../cloudflared'), None),

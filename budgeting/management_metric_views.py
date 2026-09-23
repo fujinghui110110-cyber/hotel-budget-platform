@@ -16,6 +16,7 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import IntegrityError, OperationalError
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
@@ -101,19 +102,28 @@ def _visible_projects(user):
 
 
 def _project_id_for_request(request, projects):
+    is_admin = _is_admin(request.user)
+    bound_project_id = getattr(request.user, "project_id", None)
+    if not is_admin and not bound_project_id:
+        raise PermissionDenied("项目账号必须绑定项目。")
     raw = request.GET.get("project", "")
     if not raw:
-        return None
+        if is_admin:
+            return None
+        identity = projects.filter(project_id=bound_project_id).first()
+        return identity.pk if identity is not None else -bound_project_id
     if raw.startswith("-"):
         project_id = _signed_id(raw)
         # Negative IDs are transient identities created by the comparison
         # service for budget projects that have no imported history row.
         project = get_object_or_404(Project, pk=abs(project_id))
-        if not _is_admin(request.user) and getattr(request.user, "project_id", None) != project.pk:
+        if not is_admin and bound_project_id != project.pk:
             raise Http404("项目不存在")
         return project_id
     project_id = _positive_id(raw)
     if not projects.filter(pk=project_id).exists():
+        raise Http404("项目不存在")
+    if not is_admin and not projects.filter(pk=project_id, project_id=bound_project_id).exists():
         raise Http404("项目不存在")
     return project_id
 
@@ -267,6 +277,7 @@ def _comparison_context(request):
     compare_index = _compare_index(request.GET.get("compare_index"), 2)
     projects = _visible_projects(request.user)
     project_id = _project_id_for_request(request, projects)
+    allowed_project_ids = None if _is_admin(request.user) else {request.user.project_id}
     result = service.comparison_data(
         cycle=cycle,
         year=year,
@@ -275,6 +286,7 @@ def _comparison_context(request):
         month=month,
         base_year=base_year,
         project_id=project_id,
+        allowed_project_ids=allowed_project_ids,
         compare_index=compare_index,
     )
     result = dict(result or {})
