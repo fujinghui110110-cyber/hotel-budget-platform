@@ -94,7 +94,7 @@ jobs:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: read
+      contents: write
       attestations: read
     env:
       GH_TOKEN: ${{ github.token }}
