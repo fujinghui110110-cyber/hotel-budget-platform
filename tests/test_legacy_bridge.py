@@ -34,6 +34,8 @@ class LegacyBridgeTests(unittest.TestCase):
                 self.assertEqual((target / name).read_bytes(), expected, name)
             self.assertEqual(manifest['schema'], 1)
             self.assertFalse(manifest['database_migrations_changed'])
+            self.assertIn('requirements-update.lock', manifest['files'])
+            self.assertIn('--hash=sha256:', (target / 'requirements-update.lock').read_text(encoding='utf-8'))
 
     def test_original_shortcut_keeps_shared_data_paths_after_handoff(self):
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {}, clear=True):

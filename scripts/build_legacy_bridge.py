@@ -11,6 +11,7 @@ from scripts.build_system_release import allowed_path, git
 BASE_COMMIT = '48a933393e87f04d742c607dc9d955f5bb4e9531'
 BRIDGE_VERSION = '2026.09.23.0'
 OVERLAY = (
+    'requirements-update.lock',
     'scripts/system_update.py', 'scripts/runtime_support.py',
     'scripts/release_adapter.py', 'scripts/release_manager.py',
     'scripts/build_system_release.py', 'scripts/github_cli.py',
